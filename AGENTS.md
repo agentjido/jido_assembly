@@ -1,47 +1,68 @@
-This is a web application written using the Phoenix web framework.
+# Jido Campfire Agent Guide
 
-## Project guidelines
+This package is a developer-level spike for a Slack-like Jido chat workspace.
+It uses Hologram as the UI layer, Phoenix as the web shell, `jido_messaging`
+for durable chat primitives, SQLite for local persistence, Jido Signal-style
+events for UI updates, and Phoenix Presence for online state.
 
-- Use `mix precommit` alias when you are done with all changes and fix any pending issues
-- Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
+## Intent
 
-### Phoenix v1.8 guidelines
+- Optimize for a clear developer demo, not production Slack compatibility.
+- Keep the app straightforward enough for a reader to understand in one pass.
+- Prefer explicit Elixir modules and focused tests over framework cleverness.
+- Support a single seeded workspace with channels, DMs, messages, reactions,
+  threads, mentions, search, and presence for roughly 5-10 local demo users.
 
-- **Always** begin your LiveView templates with `<Layouts.app flash={@flash} ...>` which wraps all inner content
-- The `MyAppWeb.Layouts` module is aliased in the `my_app_web.ex` file, so you can use it without needing to alias it again
-- Anytime you run into errors with no `current_scope` assign:
-  - You failed to follow the Authenticated Routes guidelines, or you failed to pass `current_scope` to `<Layouts.app>`
-  - **Always** fix the `current_scope` error by moving your routes to the proper `live_session` and ensure you pass `current_scope` as needed
-- Phoenix v1.8 moved the `<.flash_group>` component to the `Layouts` module. You are **forbidden** from calling `<.flash_group>` outside of the `layouts.ex` module
-- Out of the box, `core_components.ex` imports an `<.icon name="hero-x-mark" class="w-5 h-5"/>` component for hero icons. **Always** use the `<.icon>` component for icons, **never** use `Heroicons` modules or similar
-- **Always** use the imported `<.input>` component for form inputs from `core_components.ex` when available. `<.input>` is imported and using it will save steps and prevent errors
-- If you override the default input classes (`<.input class="myclass px-2 py-1 rounded-lg">)`) class with your own values, no default classes are inherited, so your
-custom classes must fully style the input
+## Boundaries
 
-### JS and CSS guidelines
+- `app/` is the Hologram surface: pages, components, client reducers, and server
+  commands.
+- `lib/jido_campfire/` is the app backend: chat context, read projections,
+  mentions, seeds, messaging integration, Presence adapter configuration, and
+  inspector data.
+- `lib/jido_campfire_web/` should stay thin: endpoint, router, Phoenix Presence,
+  Hologram presence notifier, and presentation helpers at the web/UI boundary.
+- `jido_messaging` owns reusable messaging primitives, SQLite persistence, query
+  helpers, signal creation, and generic Presence integration.
+- Campfire owns product-specific choices: Slack-like room lists, unread counts,
+  demo users, seeded content, and UI read models.
 
-- **Use Tailwind CSS classes and custom CSS rules** to create polished, responsive, and visually stunning interfaces.
-- Tailwindcss v4 **no longer needs a tailwind.config.js** and uses a new import syntax in `app.css`:
+## Code Patterns
 
-      @import "tailwindcss" source(none);
-      @source "../css";
-      @source "../js";
-      @source "../../lib/my_app_web";
+- Keep Hologram-specific structs and UI payload shaping out of the core chat
+  context unless the boundary is intentionally a presenter.
+- Prefer pattern matching in presenters and projections over condition-heavy map
+  plumbing.
+- Persist first, then broadcast compact signal metadata for realtime UI updates.
+- Use `Jido.Campfire.Chat` as the backend entry point from Hologram commands.
+- Use `Jido.Campfire.Chat.Projections` for room/message/person maps consumed by
+  Hologram components.
+- Keep Phoenix Presence wiring behind `Jido.Campfire.Presence` and
+  `Jido.CampfireWeb.Presence`; do not make `jido_messaging` depend on Phoenix.
+- Seeds are acceptable here because this is a demo package. Keep them obvious,
+  deterministic, and easy to reset.
 
-- **Always use and maintain this import syntax** in the app.css file for projects generated with `phx.new`
-- **Never** use `@apply` when writing raw css
-- **Always** manually write your own tailwind-based components instead of using daisyUI for a unique, world-class design
-- Out of the box **only the app.js and app.css bundles are supported**
-  - You cannot reference an external vendor'd script `src` or link `href` in the layouts
-  - You must import the vendor deps into app.js and app.css to use them
-  - **Never write inline <script>custom js</script> tags within templates**
+## Running And Verification
 
-### UI/UX & design guidelines
+- Run setup with `mix setup`.
+- Start the Hologram app with `mix holo`.
+- If port 4000 is already in use, run `PORT=4002 mix holo`.
+- Reset demo state by deleting `data/jido_campfire.sqlite3`.
+- Before finishing code changes, run `mix test`, `mix compile --warnings-as-errors`,
+  and `HOLOGRAM_START=1 mix compile --force` when Hologram modules changed.
+- Use `mix precommit` when the change set is broad enough to justify the full
+  local check.
 
-- **Produce world-class UI designs** with a focus on usability, aesthetics, and modern design principles
-- Implement **subtle micro-interactions** (e.g., button hover effects, and smooth transitions)
-- Ensure **clean typography, spacing, and layout balance** for a refined, premium look
-- Focus on **delightful details** like hover effects, loading states, and smooth page transitions
+## UI Notes
+
+- This is a working app screen, not a marketing page. Keep the first screen as
+  the chat workspace.
+- Use dense, readable operational UI patterns: clear room navigation, compact
+  message rows, obvious composer behavior, and keyboard-friendly interactions.
+- Buttons should look and behave like buttons. Icon-only controls need accessible
+  labels or titles.
+- Preserve mobile behavior when changing the room list, composer, or thread
+  panel.
 
 
 <!-- usage-rules-start -->

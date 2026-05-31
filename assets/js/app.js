@@ -82,6 +82,19 @@ import "phoenix_html"
 // }
 
 
+const composerFieldSelector = "[data-campfire-composer] input[type='text'], [data-campfire-composer] textarea"
+
+document.addEventListener("keydown", (event) => {
+  const field = event.target.closest?.(composerFieldSelector)
+
+  if (!field) return
+  if (event.key !== "Enter") return
+  if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return
+
+  event.preventDefault()
+  field.form?.requestSubmit()
+}, true)
+
 // Handle flash close
 document.querySelectorAll("[role=alert][data-flash]").forEach((el) => {
   el.addEventListener("click", () => {

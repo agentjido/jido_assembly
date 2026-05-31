@@ -12,17 +12,19 @@ defmodule Jido.Campfire.ChatTest do
     assert Map.has_key?(snapshot.messages_by_room, snapshot.active_room_id)
   end
 
-  test "snapshot exposes the developer showcase stack" do
-    showcase = Chat.snapshot().developer_showcase
+  test "snapshot exposes the developer inspector stack" do
+    inspector = Chat.snapshot().inspector
 
-    stack_names = Enum.map(showcase.stack, & &1.name)
+    stack_names = Enum.map(inspector.stack, & &1.name)
     assert "Hologram" in stack_names
     assert "Jido Messaging" in stack_names
+    assert "Jido Signal" in stack_names
     assert "Jido Chat" in stack_names
     assert "Jido" in stack_names
 
-    assert Enum.any?(showcase.chat_contract, &(&1.detail == "Jido.Chat.MessagingTarget"))
-    assert Enum.any?(showcase.capabilities, &(&1.feature == "Threads"))
+    assert Enum.any?(inspector.chat_contract, &(&1.detail == "Jido.Chat.MessagingTarget"))
+    assert Enum.any?(inspector.capabilities, &(&1.feature == "Threads"))
+    assert Enum.any?(inspector.capabilities, &(&1.feature == "Signals"))
   end
 
   test "send_message persists through jido_messaging" do
@@ -52,6 +54,9 @@ defmodule Jido.Campfire.ChatTest do
     assert message.sender_id == "user:maggie"
     assert message.author == "Maggie"
     assert "user:priya" in message.mentioned_user_ids
+
+    assert {:ok, persisted_message} = Jido.Campfire.Messaging.get_message(message.id)
+    assert persisted_message.metadata.mention_handles == ["priya"]
   end
 
   test "toggle_reaction persists reaction state on messages" do
@@ -59,10 +64,79 @@ defmodule Jido.Campfire.ChatTest do
     assert {:ok, message} = Chat.send_message("room:general", body)
 
     assert {:ok, reacted} = Chat.toggle_reaction(message.id, "+1", "user:maggie")
-    assert [%{emoji: "+1", count: 1, user_ids: ["user:maggie"]}] = reacted.reactions
+
+    assert [
+             %{
+               emoji: "+1",
+               glyph: "👍",
+               label: "Agree",
+               count: 1,
+               user_ids: ["user:maggie"]
+             }
+           ] = reacted.reactions
 
     assert {:ok, unreacted} = Chat.toggle_reaction(message.id, "+1", "user:maggie")
     assert unreacted.reactions == []
+  end
+
+  test "writes emit jido_messaging signals with a legacy PubSub mirror" do
+    room_id = "room:general"
+    :ok = Jido.Campfire.Messaging.subscribe(room_id)
+    {:ok, subscription_id} = Jido.Campfire.Messaging.subscribe_signals("jido.messaging.**")
+
+    body = "event target #{System.unique_integer([:positive])}"
+    assert {:ok, message, [message_signal]} = Chat.send_message_command(room_id, body)
+
+    assert message_signal.type == "jido.messaging.room.message_added"
+    assert message_signal.subject == room_id
+    assert message_signal.data["payload"]["text"] == body
+    assert message_signal.data["platform"]["channel_type"] == "campfire"
+    assert message_signal.data["target"]["instance_id"] == Chat.workspace_id()
+    refute Map.has_key?(message_signal.data["platform"], "bridge_id")
+
+    assert_receive {:signal, received_message_signal}
+    assert received_message_signal.type == "jido.messaging.room.message_added"
+    assert received_message_signal.data["message_id"] == message.id
+
+    assert_receive {:message_added, raw_message}
+    assert raw_message.id == message.id
+
+    assert {:ok, reacted, [reaction_signal]} =
+             Chat.toggle_reaction_command(message.id, "+1", "user:maggie")
+
+    assert reaction_signal.type == "jido.messaging.message.reaction_added"
+    assert reaction_signal.data["participant_id"] == "user:maggie"
+
+    assert_receive {:reaction_added,
+                    %{
+                      message_id: message_id,
+                      participant_id: "user:maggie",
+                      reaction: "+1",
+                      message: reacted_message
+                    }}
+
+    assert message_id == reacted.id
+    assert reacted_message.reactions["+1"] == ["user:maggie"]
+    assert_receive {:signal, received_reaction_signal}
+    assert received_reaction_signal.type == "jido.messaging.message.reaction_added"
+
+    assert {:ok, _unreacted, [remove_signal]} =
+             Chat.toggle_reaction_command(message.id, "+1", "user:maggie")
+
+    assert remove_signal.type == "jido.messaging.message.reaction_removed"
+
+    assert_receive {:reaction_removed,
+                    %{
+                      message_id: ^message_id,
+                      participant_id: "user:maggie",
+                      reaction: "+1"
+                    }}
+
+    assert_receive {:signal, received_remove_signal}
+    assert received_remove_signal.type == "jido.messaging.message.reaction_removed"
+
+    :ok = Jido.Campfire.Messaging.unsubscribe_signals(subscription_id)
+    :ok = Jido.Campfire.Messaging.unsubscribe(room_id)
   end
 
   test "thread replies are listed under the root message" do

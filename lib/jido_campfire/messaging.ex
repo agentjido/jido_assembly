@@ -8,6 +8,7 @@ defmodule Jido.Campfire.Messaging do
   """
 
   use Jido.Messaging,
-    persistence: Jido.Campfire.Persistence.SQLite,
+    persistence: Jido.Messaging.Persistence.SQLite,
+    persistence_opts: [path: "data/jido_campfire.sqlite3"],
     pubsub: Jido.Campfire.PubSub
 end

@@ -1,10 +1,21 @@
 defmodule Jido.Campfire.Pages.CampfireTest do
   use Jido.Campfire.HologramPageCase, async: false
 
-  alias Hologram.Component.Command
+  alias Hologram.Component.{Action, Command}
   alias Hologram.Server.Broadcast
-  alias Jido.Campfire.Chat
+  alias Jido.Campfire.Components.Campfire.ThreadPanel
+  alias Jido.Campfire.{Chat, Presence}
   alias Jido.Campfire.Pages.Campfire
+
+  setup do
+    Presence.reset()
+
+    on_exit(fn ->
+      Presence.reset()
+    end)
+
+    :ok
+  end
 
   test "init loads the workspace and subscribes the page to workspace broadcasts" do
     {component, server} = init_page(Campfire)
@@ -17,7 +28,82 @@ defmodule Jido.Campfire.Pages.CampfireTest do
     assert component.state.last_event.title == "Workspace loaded"
     assert Enum.any?(component.state.channels, &(&1.id == "room:general"))
     assert Enum.any?(component.state.direct_messages, &(&1.id == "dm:maggie"))
+    assert component.next_action == %Action{name: :presence_heartbeat, delay: 250}
     assert {{:workspace, Chat.workspace_id()}, "page"} in server.subscriptions
+  end
+
+  test "presence heartbeat queues a touch command and reschedules itself" do
+    {component, _server} = init_page(Campfire)
+
+    component = Campfire.action(:presence_heartbeat, %{}, component)
+
+    assert %Command{
+             name: :touch_presence,
+             params: %{user_id: "user:you", room_id: "room:general"}
+           } = component.next_command
+
+    assert %Action{name: :presence_heartbeat, delay: delay} = component.next_action
+    assert delay == Presence.heartbeat_interval_ms()
+  end
+
+  test "touch_presence command broadcasts the live presence projection" do
+    server = %Server{cid: "page", instance_id: "presence-test", session_id: "session-test"}
+
+    server =
+      Campfire.command(
+        :touch_presence,
+        %{user_id: "user:maggie", room_id: "room:general"},
+        server
+      )
+
+    assert [
+             %Broadcast{
+               channel: {:workspace, "jido"},
+               action_name: :presence_changed,
+               params: %{
+                 presence: %{online_user_ids: online_user_ids},
+                 signal: %{type: "jido.messaging.participant.presence_changed"}
+               }
+             }
+           ] = server.broadcasts
+
+    assert "user:maggie" in online_user_ids
+  end
+
+  test "presence_changed action queues a fresh read-model snapshot" do
+    {component, _server} = init_page(Campfire)
+
+    component =
+      Campfire.action(
+        :presence_changed,
+        %{
+          presence: %{online_user_ids: ["user:maggie"]},
+          signal: %{type: "jido.messaging.participant.presence_changed"}
+        },
+        component
+      )
+
+    assert %Command{
+             name: :load_snapshot,
+             params: %{user_id: "user:you", active_room_id: "room:general"}
+           } = component.next_command
+
+    assert component.state.last_event.title == "Presence synced"
+  end
+
+  test "snapshot_loaded reflects presence from the server read model" do
+    {component, _server} = init_page(Campfire)
+
+    refute Enum.find(component.state.direct_messages, &(&1.id == "dm:maggie")).online
+
+    assert {:ok, _presence, _signals} =
+             Chat.touch_presence("user:maggie", "room:general", session_id: "snapshot-presence")
+
+    component = Campfire.action(:snapshot_loaded, %{snapshot: Chat.snapshot()}, component)
+
+    maggie = Enum.find(component.state.direct_messages, &(&1.id == "dm:maggie"))
+    assert maggie.online
+    assert maggie.member_count_label == "online"
   end
 
   test "template evaluates against initialized page state" do
@@ -52,6 +138,20 @@ defmodule Jido.Campfire.Pages.CampfireTest do
            } = component.next_command
   end
 
+  test "send_message action accepts the submitted form body for Enter submits" do
+    {component, _server} = init_page(Campfire)
+
+    component = Campfire.action(:send_message, %{"body" => "  enter submit  "}, component)
+
+    assert component.state.draft == ""
+    assert component.state.send_pending
+
+    assert %Command{
+             name: :persist_message,
+             params: %{room_id: "room:general", body: "enter submit", sender_id: "user:you"}
+           } = component.next_command
+  end
+
   test "persist_message command writes through jido_messaging and broadcasts a Hologram action" do
     body = "hologram command test #{System.unique_integer([:positive])}"
     server = %Server{cid: "page", instance_id: "command-test", session_id: "session-test"}
@@ -63,7 +163,11 @@ defmodule Jido.Campfire.Pages.CampfireTest do
              %Broadcast{
                channel: {:workspace, "jido"},
                action_name: :message_saved,
-               params: %{room_id: "room:general", message: message}
+               params: %{
+                 room_id: "room:general",
+                 message: message,
+                 signal: %{type: "jido.messaging.room.message_added"}
+               }
              }
            ] = server.broadcasts
 
@@ -81,6 +185,7 @@ defmodule Jido.Campfire.Pages.CampfireTest do
     assert Enum.any?(component.state.messages_by_room["room:runtime"], &(&1.id == message.id))
     assert Enum.find(component.state.rooms, &(&1.id == "room:runtime")).unread == 1
     assert component.state.last_event.title == "Message stored"
+    assert component.state.last_event.layer == "Jido Signal"
     refute Enum.any?(component.state.messages, &(&1.id == message.id))
   end
 
@@ -115,9 +220,32 @@ defmodule Jido.Campfire.Pages.CampfireTest do
     assert component.state.thread_root.id == root.id
     assert component.state.last_event.title == "Thread opened"
 
-    dom = Campfire.template().(component.state)
+    dom = ThreadPanel.template().(component.state)
     assert dom_has_attr?(dom, "role", "dialog")
     assert dom_has_class_fragment?(dom, "xl:hidden")
+  end
+
+  test "send_reply action accepts the submitted form body for Enter submits" do
+    {component, _server} = init_page(Campfire)
+    root = List.first(component.state.messages)
+
+    component = Campfire.action(:open_thread, %{message_id: root.id}, component)
+    component = Campfire.action(:send_reply, %{"reply" => "  thread note  "}, component)
+
+    assert component.state.reply_draft == ""
+    assert component.state.reply_pending
+
+    assert %Command{
+             name: :persist_reply,
+             params: %{
+               room_id: "room:general",
+               root_message_id: root_id,
+               body: "thread note",
+               sender_id: "user:you"
+             }
+           } = component.next_command
+
+    assert root_id == root.id
   end
 
   test "rail buttons switch to channel and direct-message groups" do
@@ -156,7 +284,11 @@ defmodule Jido.Campfire.Pages.CampfireTest do
              %Broadcast{
                channel: {:workspace, "jido"},
                action_name: :room_created,
-               params: %{room: room, messages: [message]}
+               params: %{
+                 room: room,
+                 messages: [message],
+                 signal: %{type: "jido.messaging.room.created"}
+               }
              }
            ] = server.broadcasts
 
@@ -199,6 +331,7 @@ defmodule Jido.Campfire.Pages.CampfireTest do
     assert component.state.messages_by_room[room.id] == [message]
     assert Map.has_key?(component.state.developer_contract_by_room, room.id)
     assert component.state.last_event.title == "Room created"
+    assert component.state.last_event.layer == "Jido Signal"
     refute component.state.room_form_open
     assert component.state.new_room_name == ""
     assert component.state.new_room_topic == ""
@@ -223,7 +356,8 @@ defmodule Jido.Campfire.Pages.CampfireTest do
       reply_count: 0,
       mentioned_user_ids: [],
       mentions_current_user: false,
-      reactions: []
+      reactions: [],
+      available_reactions: Chat.reaction_options()
     }
   end
 

@@ -1,7 +1,31 @@
 # Jido Campfire
 
-`jido_campfire` is a Hologram/Phoenix developer demo for a small Slack-like Jido workspace backed by `jido_messaging`.
+`jido_campfire` is a developer-level spike for a small Slack-like Jido
+workspace. It uses Hologram as the UI layer, Phoenix as the web shell,
+`jido_messaging` for durable chat primitives, SQLite for local persistence,
+Jido Signal-style events for UI updates, and Phoenix Presence for online
+state.
+
 The package module prefix is `Jido.Campfire`.
+
+![Jido Campfire Slack-like chat UI](priv/static/images/campfire-screenshot.jpg)
+
+## What This Demonstrates
+
+- A responsive Slack-like shell with workspace rail, channels, DMs, timeline,
+  composer, reactions, threads, mentions, search, and mobile room switching.
+- One seeded workspace that is useful for 5-10 local demo users without adding
+  production authentication.
+- Durable rooms, participants, messages, reactions, and thread replies through
+  `jido_messaging` and SQLite.
+- Hologram realtime broadcasts carrying compact `jido.messaging.*` signal
+  metadata after durable writes commit.
+- A thin Phoenix web layer: Phoenix hosts Hologram, health checks, static
+  assets, and Presence integration while the chat behavior lives in the app
+  context.
+- A developer inspector that shows how Hologram, `jido_messaging`, Jido Signal,
+  SQLite, `jido_chat`, and Campfire responsibilities fit together for the
+  active room.
 
 ## Run
 
@@ -16,26 +40,33 @@ Use `mix holo` instead of `mix phx.server` when working on Hologram pages. In
 dev and test, Hologram only starts when `HOLOGRAM_START=1`, which `mix holo`
 sets for you.
 
+If another local app is already using port 4000:
+
+```sh
+PORT=4002 mix holo
+```
+
 Campfire stores local demo state in `data/jido_campfire.sqlite3`. Delete that
 file if you want to reset the demo workspace.
 
-## Demo Scope
+## Dependency Note
 
-- Hologram route at `/`
-- Responsive Slack-like shell with workspace rail, channels, timeline, composer,
-  contextual thread panel, and mobile thread drawer
-- One seeded workspace with multiple channels and DMs
-- Demo user switcher for 5-10 user local testing without production auth
-- `Jido.Campfire.Messaging` using `Jido.Campfire.Persistence.SQLite`
-- Rooms, participants, messages, reactions, and threads persisted through
-  `jido_messaging`
-- Developer inspector showing the live Hologram, `jido_messaging`,
-  SQLite, `jido_chat`, and Jido responsibilities for the active room
-- Hologram realtime workspace broadcasts for sends, replies, reactions, and
-  channel creation
-- Mentions, local unread counters, lightweight thread replies, message search,
-  and responsive mobile room switcher
-- Phoenix fallback health page at `/health`
+Campfire temporarily depends on the `jido_messaging` PR branch that adds the
+SQLite and signal APIs used by this demo. After
+[agentjido/jido_messaging#24](https://github.com/agentjido/jido_messaging/pull/24)
+lands and ships to Hex, switch `mix.exs` back to the released package.
+
+## Code Shape
+
+- `app/` contains Hologram pages, components, reducers, and server command
+  handlers.
+- `lib/jido_campfire/` contains the Campfire backend context, read projections,
+  mentions, seeds, messaging integration, Presence adapter configuration, and
+  developer inspector data.
+- `lib/jido_campfire_web/` stays thin: endpoint, router, Phoenix Presence,
+  Hologram presence notifier, and signal presentation for the UI.
+- `jido_messaging` owns the reusable messaging primitives and SQLite adapter;
+  Campfire owns the Slack-like product choices and demo read models.
 
 ## Testing Story
 
@@ -45,9 +76,11 @@ parts of Hologram that are most testable today: page `init/3`, template
 evaluation, client `action/3` state transitions, server `command/3` handling,
 and queued Hologram broadcasts.
 
-The SQLite adapter has focused tests for restart durability and failed durable
-write/delete behavior so the demo does not show messages in ETS that SQLite
-rejected.
+The local suite also checks the Campfire chat context, mentions, Presence
+adapter, signal presenter, and wiring to the upstream
+`Jido.Messaging.Persistence.SQLite` adapter. Adapter-level durability tests
+belong in `jido_messaging`; Campfire should prove that the demo uses those
+primitives cleanly rather than duplicating low-level persistence coverage.
 
 Compared with Phoenix LiveView testing, this is lower-level. Hologram actions
 and commands are easy to unit test because they return `%Hologram.Component{}`
@@ -69,7 +102,10 @@ Phoenix LiveView's built-in test ergonomics.
 
 ## Hologram Note
 
-`jido_messaging` currently pulls in a transitive Erlang dependency with BEAM debug info that Hologram `0.9.1` cannot reflect over. `mix setup` applies a narrow local patch to `deps/hologram/lib/hologram/reflection.ex` so unsupported BEAM debug info is skipped instead of crashing the Hologram compiler.
+`jido_messaging` currently pulls in a transitive Erlang dependency with BEAM
+debug info that Hologram `0.9.1` cannot reflect over. `mix setup` applies a
+narrow local patch to `deps/hologram/lib/hologram/reflection.ex` so unsupported
+BEAM debug info is skipped instead of crashing the Hologram compiler.
 
 ## Intentional Non-Goals
 

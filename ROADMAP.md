@@ -20,10 +20,9 @@ Implemented now:
 - Mentions, reactions, lightweight thread replies, and message search
 - Canonical rooms, participants, messages, reactions, and threads stored through
   `jido_messaging`
-- SQLite durability through `Jido.Campfire.Persistence.SQLite`, including
-  defensive write/delete ordering around the ETS mirror
+- SQLite durability through upstream `Jido.Messaging.Persistence.SQLite`
 - Hologram action/command tests for core page behavior
-- SQLite restart durability and failed write/delete tests
+- Campfire guard test confirming it uses upstream SQLite persistence
 
 Important gaps:
 
@@ -76,8 +75,8 @@ Goal: keep the current Hologram plus `jido_messaging` demo readable, durable,
 and reliable for 5-10 local users.
 
 - Keep Hologram UI state isolated from messaging persistence.
-- Keep SQLite as a small adapter around the `jido_messaging` persistence
-  behavior, not a full relational schema effort.
+- Keep SQLite durability in `jido_messaging`; Campfire should consume it through
+  its app-specific chat context.
 - Keep tests layered: Chat context ExUnit, Hologram action/command ExUnit,
   Playwright for browser/realtime/mobile.
 - Decide how feature tests should start Hologram with the Campfire patch/prune
