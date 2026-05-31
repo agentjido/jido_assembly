@@ -31,4 +31,52 @@ defmodule Jido.Campfire.ChatTest do
     assert message.room_id == room.id
     assert Enum.any?(Chat.room_views(), &(&1.id == room.id))
   end
+
+  test "send_message supports demo users and mention metadata" do
+    body = "@priya can you look at this? #{System.unique_integer([:positive])}"
+
+    assert {:ok, message} = Chat.send_message("room:general", body, "user:maggie")
+    assert message.sender_id == "user:maggie"
+    assert message.author == "Maggie"
+    assert "user:priya" in message.mentioned_user_ids
+  end
+
+  test "toggle_reaction persists reaction state on messages" do
+    body = "reaction target #{System.unique_integer([:positive])}"
+    assert {:ok, message} = Chat.send_message("room:general", body)
+
+    assert {:ok, reacted} = Chat.toggle_reaction(message.id, "+1", "user:maggie")
+    assert [%{emoji: "+1", count: 1, user_ids: ["user:maggie"]}] = reacted.reactions
+
+    assert {:ok, unreacted} = Chat.toggle_reaction(message.id, "+1", "user:maggie")
+    assert unreacted.reactions == []
+  end
+
+  test "thread replies are listed under the root message" do
+    root_body = "thread root #{System.unique_integer([:positive])}"
+    assert {:ok, root} = Chat.send_message("room:general", root_body)
+
+    assert {:ok, reply} =
+             Chat.send_message("room:general", "reply body", "user:nolan",
+               thread_id: root.id,
+               reply_to_id: root.id
+             )
+
+    refute Enum.any?(Chat.list_message_views("room:general"), &(&1.id == reply.id))
+
+    assert [%{id: reply_id}] = Chat.list_thread_views("room:general", root.id)
+    assert reply_id == reply.id
+
+    assert %{reply_count: 1} =
+             Chat.list_message_views("room:general")
+             |> Enum.find(&(&1.id == root.id))
+  end
+
+  test "search returns matching messages across the workspace" do
+    unique = "needle-#{System.unique_integer([:positive])}"
+    assert {:ok, message} = Chat.send_message("room:runtime", unique, "user:priya")
+
+    assert [%{message_id: message_id, room_id: "room:runtime"} | _] = Chat.search(unique)
+    assert message_id == message.id
+  end
 end

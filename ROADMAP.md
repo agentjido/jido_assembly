@@ -1,31 +1,36 @@
 # Jido Campfire Roadmap
 
-Campfire is currently a Slack-like product spike, not a Slack replacement. The
+Campfire is currently a Slack-like developer demo, not a Slack replacement. The
 useful product question is where Campfire should copy the category, and where it
-should diverge because Jido has a messaging and agent runtime underneath it.
+should diverge once Jido-native agents and bridges are added.
 
 ## Current Feature Inventory
 
 Implemented now:
 
 - One seeded workspace: `Jido Campfire`
-- Multiple group chats and direct messages
-- Realtime Hologram broadcasts for message sends and group chat creation
+- Multiple channels and direct messages
+- Realtime Hologram broadcasts for message sends, replies, reactions, and channel
+  creation
 - Responsive chat shell with desktop sidebar and mobile room switcher
-- Composer, room switching, unread counters, room context panel
-- Canonical rooms, participants, and messages stored through `jido_messaging`
-- ETS persistence for the spike
+- Composer, demo user switcher, room switching, unread counters, room context
+  panel, and thread panel
+- Mentions, reactions, lightweight thread replies, and message search
+- Canonical rooms, participants, messages, reactions, and threads stored through
+  `jido_messaging`
+- SQLite durability through `Jido.Campfire.Persistence.SQLite`
 - Hologram action/command tests for core page behavior
+- SQLite restart durability test
 
 Important gaps:
 
-- No durable database-backed persistence
-- No authentication, authorization, memberships, invites, or workspace switching
-- No edit/delete, reactions, emoji picker, mentions, formatting, threads, search,
-  files, pins, saved items, typing indicators, or notification preferences
+- No production authentication, authorization, memberships, invites, or workspace
+  switching
+- No edit/delete, emoji picker, formatting, files, pins, saved items, typing
+  indicators, or notification preferences
 - No private channel semantics beyond seeded DMs
 - No admin, audit log, retention, export, compliance, billing, or enterprise SSO
-- No agent runner integration beyond seeded Room Assistant messages
+- No agent runner integration yet
 - No adapter bridge UI yet for Slack, Discord, Mattermost, email, or other rooms
 
 ## Competitive Baseline
@@ -50,7 +55,8 @@ compete there directly unless Jido needs a specific enterprise integration path.
 
 ## Product Position
 
-Campfire should become an agent-native team chat and bridge console:
+After the developer demo, Campfire should become an agent-native team chat and
+bridge console:
 
 - Chat rooms are the human interface to Jido Messaging.
 - Agents can participate as first-class room members.
@@ -61,13 +67,14 @@ Campfire should become an agent-native team chat and bridge console:
 - The differentiator is not "another Slack", it is "team chat where the agent
   runtime and integration fabric are native".
 
-## Phase 0: Spike Hardening
+## Phase 0: Developer Demo Hardening
 
-Goal: prove Hologram plus `jido_messaging` is a sane foundation.
+Goal: keep the current Hologram plus `jido_messaging` demo readable, durable,
+and reliable for 5-10 local users.
 
 - Keep Hologram UI state isolated from messaging persistence.
-- Add a thin realtime bridge module that translates `jido_messaging` events into
-  Hologram broadcasts.
+- Keep SQLite as a small adapter around the `jido_messaging` persistence
+  behavior, not a full relational schema effort.
 - Keep tests layered: Chat context ExUnit, Hologram action/command ExUnit,
   Playwright for browser/realtime/mobile.
 - Decide how feature tests should start Hologram with the Campfire patch/prune
@@ -78,15 +85,15 @@ Exit criteria:
 
 - One command runs compile, unit tests, Hologram page tests, and assets.
 - Playwright smoke proves two-tab realtime message propagation.
-- Room creation and message send paths are represented in automated tests.
+- Room creation, message send, replies, reactions, search, mentions, and SQLite
+  restart durability are represented in automated tests.
 - The Hologram compiler workaround is documented and reproducible from clean deps.
 
 ## Phase 1: Chat MVP
 
 Goal: reach the minimum Slack-shaped experience that a small team can use.
 
-- Durable persistence for rooms, participants, memberships, messages, reactions,
-  and read receipts.
+- Durable persistence for memberships and read receipts.
 - Real identity: user records, sessions, current user from auth, invite links.
 - Channel and DM lifecycle: create, rename, archive, join/leave, membership list.
 - Message primitives: edit, delete, soft-delete, reactions, timestamps, delivery

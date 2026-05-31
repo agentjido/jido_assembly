@@ -1,10 +1,11 @@
 defmodule Jido.Campfire.Chat do
   @moduledoc """
-  One-workspace chat context for the Campfire Hologram UI.
+  One-workspace chat context for the Campfire Hologram developer demo.
 
-  This module owns only Campfire presentation choices: seeded workspace data,
-  room/message view models, and Slack-like room creation. Canonical rooms,
-  participants, and messages are stored through `Jido.Campfire.Messaging`.
+  Campfire keeps the product model intentionally small: one workspace, a few
+  demo users, channels, DMs, durable messages, reactions, mentions, search, and
+  lightweight thread replies. Canonical records are stored through
+  `Jido.Campfire.Messaging`; this module only shapes those records for the UI.
   """
 
   alias Jido.Campfire.Messaging
@@ -12,7 +13,9 @@ defmodule Jido.Campfire.Chat do
   @workspace_id "jido"
   @workspace_name "Jido Campfire"
   @current_user_id "user:you"
+  @system_user_id "system:campfire"
   @default_room_id "room:general"
+  @reaction_options ["+1", "ship", "seen"]
 
   @people [
     %{
@@ -48,12 +51,12 @@ defmodule Jido.Campfire.Chat do
       tone: "bg-violet-200 text-violet-950"
     },
     %{
-      id: "agent:room-assistant",
-      name: "Room Assistant",
-      initials: "RA",
+      id: @system_user_id,
+      name: "Campfire",
+      initials: "CF",
       presence: :online,
-      title: "Agent",
-      type: :agent,
+      title: "System",
+      type: :system,
       tone: "bg-stone-800 text-stone-100"
     }
   ]
@@ -62,7 +65,7 @@ defmodule Jido.Campfire.Chat do
     %{
       id: "room:general",
       name: "general",
-      topic: "Daily coordination for Jido adapter work.",
+      topic: "Daily coordination for the Jido messaging demo.",
       position: 10
     },
     %{
@@ -74,7 +77,7 @@ defmodule Jido.Campfire.Chat do
     %{
       id: "room:runtime",
       name: "runtime",
-      topic: "Messaging persistence, delivery, and agent runtime.",
+      topic: "Messaging persistence, delivery, and Hologram state.",
       position: 30
     },
     %{
@@ -88,39 +91,30 @@ defmodule Jido.Campfire.Chat do
   @seed_dms [
     %{id: "dm:maggie", participant_id: "user:maggie", position: 110},
     %{id: "dm:nolan", participant_id: "user:nolan", position: 120},
-    %{id: "dm:priya", participant_id: "user:priya", position: 130},
-    %{id: "dm:room-assistant", participant_id: "agent:room-assistant", position: 140}
+    %{id: "dm:priya", participant_id: "user:priya", position: 130}
   ]
 
   @seed_messages %{
     "room:general" => [
       {"user:maggie",
        "Campfire should prove the Hologram path without touching the existing UI package."},
-      {"user:nolan",
-       "The useful slice is channel switching, a real composer, and a path for server commands."},
+      {"user:nolan", "SQLite is wired as a simple persistence layer behind jido_messaging."},
       {"user:priya",
-       "I added room-context notes: bridge state on the right, channels on the left, timeline in the middle."},
-      {"agent:room-assistant",
-       "Campfire is now reading from jido_messaging. Hologram broadcasts update connected clients in realtime."}
+       "The useful demo slice is channel switching, DMs, reactions, mentions, and threads."}
     ],
     "room:adapter-lab" => [
       {"user:maggie",
        "Slack outbound smoke is clean. Need a webhook replay before we call the adapter green."},
-      {"user:priya",
-       "Telegram polling is connected. I dropped the recent event shape in the lab thread."},
-      {"agent:room-assistant",
-       "Next best check: normalize provider payloads into one table before adapter-specific UI polish."}
+      {"user:priya", "I dropped the recent provider event shape in the lab thread."}
     ],
     "room:runtime" => [
       {"user:nolan",
-       "I want the first Campfire persistence slice to read from jido_messaging without owning its schemas."},
-      {"user:maggie",
-       "Agree. Treat realtime as a notification layer, then re-read canonical messages after sends."},
-      {"agent:room-assistant", "Persisted message IDs are the stable UI keys now."}
+       "Treat realtime as a notification layer, then read canonical records from jido_messaging."},
+      {"user:maggie", "Persisted message IDs are the stable UI keys now."}
     ],
     "room:design" => [
       {"user:priya",
-       "Keep the right panel contextual. Threads, bridge health, and agent suggestions can rotate through the same area."},
+       "Keep the right panel contextual. Threads and room details can share that space."},
       {"user:you", "The sidebar should feel familiar, but Campfire can own the warmer accent."},
       {"user:maggie", "First screen is the chat workspace. No marketing shell."}
     ],
@@ -130,23 +124,24 @@ defmodule Jido.Campfire.Chat do
       {"user:you", "Yes. Channels for team rooms, DMs for person-to-person notes."}
     ],
     "dm:nolan" => [
-      {"user:nolan", "The ETS adapter is fine for this spike. We can swap persistence later."}
+      {"user:nolan", "SQLite durability is enough for the developer demo."}
     ],
     "dm:priya" => [
       {"user:priya", "Mobile needs a room switcher since the sidebar collapses."}
-    ],
-    "dm:room-assistant" => [
-      {"agent:room-assistant",
-       "I can summarize room context once the agent runner is wired into this shell."}
     ]
   }
 
   def workspace_id, do: @workspace_id
   def current_user_id, do: @current_user_id
+  def reaction_options, do: @reaction_options
 
-  def current_user do
-    person_view(@current_user_id)
+  def demo_users do
+    @people
+    |> Enum.reject(&Map.get(&1, :type))
+    |> Enum.map(&person_view_from_seed/1)
   end
+
+  def current_user(user_id \\ @current_user_id), do: person_view(user_id)
 
   def ensure_seeded! do
     seed_people()
@@ -155,22 +150,38 @@ defmodule Jido.Campfire.Chat do
     :ok
   end
 
-  def snapshot do
+  def snapshot(user_id \\ @current_user_id, active_room_id \\ @default_room_id) do
     ensure_seeded!()
 
     rooms = room_views()
     {channels, direct_messages} = split_rooms(rooms)
-    active_room = Enum.find(rooms, &(&1.id == @default_room_id)) || List.first(rooms)
-    messages_by_room = Map.new(rooms, &{&1.id, list_message_views(&1.id)})
+
+    active_room =
+      Enum.find(rooms, &(&1.id == active_room_id)) ||
+        Enum.find(rooms, &(&1.id == @default_room_id)) || List.first(rooms)
+
+    {messages_by_room, threads_by_room} =
+      rooms
+      |> Enum.map(fn room ->
+        {messages, threads} = room_message_data(room.id, user_id)
+        {room.id, messages, threads}
+      end)
+      |> Enum.reduce({%{}, %{}}, fn {room_id, messages, threads}, {messages_acc, threads_acc} ->
+        {Map.put(messages_acc, room_id, messages), Map.put(threads_acc, room_id, threads)}
+      end)
+
     messages = Map.get(messages_by_room, active_room.id, [])
 
     %{
       workspace: %{id: @workspace_id, name: @workspace_name},
-      current_user: current_user(),
+      current_user: current_user(user_id),
+      demo_users: demo_users(),
+      reaction_options: @reaction_options,
       rooms: rooms,
       channels: channels,
       direct_messages: direct_messages,
       messages_by_room: messages_by_room,
+      threads_by_room: threads_by_room,
       active_room: active_room,
       active_room_id: active_room.id,
       active_room_name: active_room.name,
@@ -182,19 +193,27 @@ defmodule Jido.Campfire.Chat do
     }
   end
 
-  def list_message_views(room_id) when is_binary(room_id) do
+  def list_message_views(room_id, user_id \\ @current_user_id) when is_binary(room_id) do
     ensure_seeded!()
 
-    case Messaging.list_messages(room_id, limit: 100) do
-      {:ok, messages} -> Enum.map(messages, &message_view/1)
-      {:error, _reason} -> []
-    end
+    {messages, _threads} = room_message_data(room_id, user_id)
+    messages
   end
 
-  def send_message(room_id, body, sender_id \\ @current_user_id) when is_binary(room_id) do
+  def list_thread_views(room_id, root_message_id, user_id \\ @current_user_id) do
+    ensure_seeded!()
+
+    {_messages, threads} = room_message_data(room_id, user_id)
+    Map.get(threads, root_message_id, [])
+  end
+
+  def send_message(room_id, body, sender_id \\ @current_user_id, opts \\ [])
+      when is_binary(room_id) do
     ensure_seeded!()
 
     body = body |> to_string() |> String.trim()
+    thread_id = opts[:thread_id]
+    reply_to_id = opts[:reply_to_id] || thread_id
 
     cond do
       body == "" ->
@@ -202,22 +221,76 @@ defmodule Jido.Campfire.Chat do
 
       true ->
         with {:ok, room} <- Messaging.get_room(room_id),
+             :ok <- ensure_thread(room.id, thread_id),
              {:ok, message} <-
                Messaging.save_message(%{
                  room_id: room.id,
                  sender_id: sender_id,
                  role: :user,
                  content: [%{type: "text", text: body}],
+                 reply_to_id: reply_to_id,
+                 thread_id: thread_id,
                  status: :sent,
                  metadata: %{
                    workspace_id: @workspace_id,
                    room_kind: room_kind(room),
-                   source: "jido_campfire"
+                   source: "jido_campfire",
+                   mentions: mention_user_ids(body)
                  }
                }) do
           broadcast_messaging_event(room.id, {:message_added, message})
-          {:ok, message_view(message)}
+          {:ok, message_view_with_reply_count(message, sender_id)}
         end
+    end
+  end
+
+  def toggle_reaction(message_id, emoji, user_id \\ @current_user_id) do
+    ensure_seeded!()
+
+    emoji = to_string(emoji)
+
+    with {:ok, message} <- Messaging.get_message(message_id) do
+      reactions = message.reactions || %{}
+      users = reactions |> Map.get(emoji, []) |> List.wrap() |> Enum.map(&to_string/1)
+
+      users =
+        if user_id in users do
+          Enum.reject(users, &(&1 == user_id))
+        else
+          [user_id | users]
+        end
+
+      reactions =
+        if users == [] do
+          Map.delete(reactions, emoji)
+        else
+          Map.put(reactions, emoji, Enum.sort(users))
+        end
+
+      updated_message = %{message | reactions: reactions, updated_at: DateTime.utc_now()}
+
+      with {:ok, updated_message} <- Messaging.save_message_struct(updated_message) do
+        {:ok, message_view_with_reply_count(updated_message, user_id)}
+      end
+    end
+  end
+
+  def search(query, user_id \\ @current_user_id) do
+    ensure_seeded!()
+
+    query = query |> to_string() |> String.trim() |> String.downcase()
+
+    if query == "" do
+      []
+    else
+      room_views()
+      |> Enum.flat_map(fn room ->
+        room.id
+        |> list_all_message_views(user_id)
+        |> Enum.filter(&search_match?(&1, query, room))
+        |> Enum.map(&search_result(room, &1))
+      end)
+      |> Enum.take(20)
     end
   end
 
@@ -252,14 +325,14 @@ defmodule Jido.Campfire.Chat do
                    workspace_id: @workspace_id,
                    campfire_kind: "channel",
                    topic: blank_to_default(topic, "Group chat for #{name}."),
-                   member_ids: Enum.map(@people, & &1.id),
+                   member_ids: demo_user_ids(),
                    position: position
                  }
                }),
              {:ok, message} <-
                Messaging.save_message(%{
                  room_id: room.id,
-                 sender_id: "agent:room-assistant",
+                 sender_id: @system_user_id,
                  role: :system,
                  content: [
                    %{
@@ -268,9 +341,9 @@ defmodule Jido.Campfire.Chat do
                    }
                  ],
                  status: :sent,
-                 metadata: %{workspace_id: @workspace_id, source: "jido_campfire"}
+                 metadata: %{workspace_id: @workspace_id, source: "jido_campfire", mentions: []}
                }) do
-          {:ok, room_view(room), [message_view(message)]}
+          {:ok, room_view(room), [message_view(message, @current_user_id)]}
         end
     end
   end
@@ -304,6 +377,7 @@ defmodule Jido.Campfire.Chat do
       prefix: if(kind == "dm", do: "@", else: "#"),
       topic: topic,
       unread: 0,
+      mention_unread: 0,
       online: participant && participant.presence == "online",
       presence: if(participant, do: participant.presence, else: "active"),
       avatar: if(participant, do: participant.initials, else: "#"),
@@ -315,8 +389,62 @@ defmodule Jido.Campfire.Chat do
     }
   end
 
-  def message_view(message) do
+  def error_to_string(:empty_message), do: "Type a message first."
+  def error_to_string(:empty_name), do: "Name the group chat first."
+  def error_to_string(:not_found), do: "That room is no longer available."
+  def error_to_string(reason), do: "Something went wrong: #{inspect(reason)}"
+
+  defp room_message_data(room_id, user_id) do
+    case Messaging.list_messages(room_id, limit: 500) do
+      {:ok, messages} ->
+        messages = Enum.sort_by(messages, & &1.inserted_at, {:asc, DateTime})
+
+        replies_by_thread =
+          messages |> Enum.filter(&is_binary(&1.thread_id)) |> Enum.group_by(& &1.thread_id)
+
+        timeline =
+          messages
+          |> Enum.reject(&is_binary(&1.thread_id))
+          |> Enum.map(fn message ->
+            reply_count = replies_by_thread |> Map.get(message.id, []) |> Enum.count()
+            message_view(message, user_id, reply_count)
+          end)
+
+        threads =
+          Map.new(replies_by_thread, fn {thread_id, replies} ->
+            {thread_id, Enum.map(replies, &message_view(&1, user_id))}
+          end)
+
+        {timeline, threads}
+
+      {:error, _reason} ->
+        {[], %{}}
+    end
+  end
+
+  defp list_all_message_views(room_id, user_id) do
+    {timeline, threads} = room_message_data(room_id, user_id)
+    timeline ++ (threads |> Map.values() |> List.flatten())
+  end
+
+  defp message_view_with_reply_count(%{thread_id: thread_id} = message, user_id)
+       when is_binary(thread_id) do
+    message_view(message, user_id)
+  end
+
+  defp message_view_with_reply_count(message, user_id) do
+    reply_count =
+      case Messaging.list_messages(message.room_id, limit: 500) do
+        {:ok, messages} -> Enum.count(messages, &(&1.thread_id == message.id))
+        {:error, _reason} -> 0
+      end
+
+    message_view(message, user_id, reply_count)
+  end
+
+  defp message_view(message, user_id, reply_count \\ 0) do
     sender = person_view(message.sender_id)
+    mentioned_user_ids = metadata_value(message.metadata, :mentions, [])
 
     %{
       id: message.id,
@@ -325,17 +453,77 @@ defmodule Jido.Campfire.Chat do
       author: sender.name,
       avatar: sender.initials,
       tone: sender.tone,
-      own: message.sender_id == @current_user_id,
+      own: message.sender_id == user_id,
       time: format_time(message.inserted_at),
       body: message_text(message),
-      status: message.status |> Atom.to_string() |> String.replace("_", " ")
+      status: message.status |> Atom.to_string() |> String.replace("_", " "),
+      thread_id: message.thread_id,
+      reply_to_id: message.reply_to_id,
+      is_reply: is_binary(message.thread_id),
+      reply_count: reply_count,
+      mentioned_user_ids: mentioned_user_ids,
+      mentions_current_user: user_id in mentioned_user_ids,
+      reactions: reaction_views(message.reactions || %{}, user_id)
     }
   end
 
-  def error_to_string(:empty_message), do: "Type a message first."
-  def error_to_string(:empty_name), do: "Name the group chat first."
-  def error_to_string(:not_found), do: "That room is no longer available."
-  def error_to_string(reason), do: "Something went wrong: #{inspect(reason)}"
+  defp reaction_views(reactions, user_id) do
+    reactions
+    |> Enum.map(fn {emoji, user_ids} ->
+      user_ids = List.wrap(user_ids)
+
+      %{
+        emoji: emoji,
+        count: Enum.count(user_ids),
+        reacted: user_id in user_ids,
+        user_ids: user_ids
+      }
+    end)
+    |> Enum.sort_by(& &1.emoji)
+  end
+
+  defp search_match?(message, query, room) do
+    values = [message.body, message.author, room.name]
+
+    Enum.any?(values, fn value ->
+      value |> to_string() |> String.downcase() |> String.contains?(query)
+    end)
+  end
+
+  defp search_result(room, message) do
+    %{
+      room_id: room.id,
+      room_label: "#{room.prefix}#{room.name}",
+      message_id: message.id,
+      thread_id: message.thread_id,
+      author: message.author,
+      body: message.body,
+      time: message.time
+    }
+  end
+
+  defp ensure_thread(_room_id, nil), do: :ok
+
+  defp ensure_thread(room_id, root_message_id) do
+    with {:ok, _root_message} <- Messaging.get_message(root_message_id) do
+      case Messaging.get_thread(root_message_id) do
+        {:ok, _thread} ->
+          :ok
+
+        {:error, :not_found} ->
+          case Messaging.save_thread(%{
+                 id: root_message_id,
+                 room_id: room_id,
+                 root_message_id: root_message_id,
+                 status: :active,
+                 metadata: %{workspace_id: @workspace_id, source: "jido_campfire"}
+               }) do
+            {:ok, _thread} -> :ok
+            {:error, reason} -> {:error, reason}
+          end
+      end
+    end
+  end
 
   defp seed_people do
     Enum.each(@people, fn person ->
@@ -373,7 +561,7 @@ defmodule Jido.Campfire.Chat do
           workspace_id: @workspace_id,
           campfire_kind: "channel",
           topic: channel.topic,
-          member_ids: Enum.map(@people, & &1.id),
+          member_ids: demo_user_ids(),
           position: channel.position
         }
       })
@@ -423,12 +611,16 @@ defmodule Jido.Campfire.Chat do
               Messaging.save_message(%{
                 room_id: room_id,
                 sender_id: sender_id,
-                role: if(String.starts_with?(sender_id, "agent:"), do: :assistant, else: :user),
+                role: :user,
                 content: [%{type: "text", text: text}],
                 status: :sent,
                 inserted_at: inserted_at,
                 updated_at: inserted_at,
-                metadata: %{workspace_id: @workspace_id, source: "seed"}
+                metadata: %{
+                  workspace_id: @workspace_id,
+                  source: "seed",
+                  mentions: mention_user_ids(text)
+                }
               })
           end)
 
@@ -509,6 +701,17 @@ defmodule Jido.Campfire.Chat do
     end
   end
 
+  defp person_view_from_seed(person) do
+    %{
+      id: person.id,
+      name: person.name,
+      initials: person.initials,
+      title: person.title,
+      tone: person.tone,
+      presence: person.presence |> Atom.to_string()
+    }
+  end
+
   defp person_seed(person_id) do
     Enum.find(@people, &(&1.id == person_id)) || fallback_person(person_id)
   end
@@ -522,6 +725,12 @@ defmodule Jido.Campfire.Chat do
       tone: "bg-stone-200 text-stone-950",
       presence: "offline"
     }
+  end
+
+  defp demo_user_ids do
+    @people
+    |> Enum.reject(&Map.get(&1, :type))
+    |> Enum.map(& &1.id)
   end
 
   defp metadata_value(nil, _key, default), do: default
@@ -540,6 +749,18 @@ defmodule Jido.Campfire.Chat do
       text when is_binary(text) -> text
       _other -> nil
     end)
+  end
+
+  defp mention_user_ids(body) do
+    normalized = body |> to_string() |> String.downcase()
+
+    @people
+    |> Enum.reject(&Map.get(&1, :type))
+    |> Enum.filter(fn person ->
+      token = person.name |> String.split(" ") |> hd() |> String.downcase()
+      String.contains?(normalized, "@#{token}")
+    end)
+    |> Enum.map(& &1.id)
   end
 
   defp format_time(nil), do: ""

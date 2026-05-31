@@ -9,7 +9,8 @@ import Config
 
 config :jido_campfire,
   namespace: Jido.Campfire,
-  generators: [timestamp_type: :utc_datetime]
+  generators: [timestamp_type: :utc_datetime],
+  sqlite_path: "data/jido_campfire.sqlite3"
 
 # Configure the endpoint
 config :jido_campfire, Jido.CampfireWeb.Endpoint,

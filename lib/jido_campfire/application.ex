@@ -11,7 +11,10 @@ defmodule Jido.Campfire.Application do
       Jido.CampfireWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:jido_campfire, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Jido.Campfire.PubSub},
-      Jido.Campfire.Messaging,
+      {Jido.Campfire.Messaging,
+       persistence_opts: [
+         path: Application.get_env(:jido_campfire, :sqlite_path, "data/jido_campfire.sqlite3")
+       ]},
       Jido.Campfire.Chat.Seeds,
       # Start a worker by calling: Jido.Campfire.Worker.start_link(arg)
       # {Jido.Campfire.Worker, arg},

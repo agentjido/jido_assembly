@@ -2,12 +2,12 @@ defmodule Jido.Campfire.Messaging do
   @moduledoc """
   Campfire's local `jido_messaging` instance.
 
-  The spike keeps persistence in `Jido.Messaging.Persistence.ETS`, so app
-  restarts reset the workspace. The Hologram UI treats this module as the
-  canonical room/message store.
+  The Hologram UI treats this module as the canonical room/message store. The
+  developer demo uses a small SQLite-backed persistence adapter so rooms,
+  participants, messages, reactions, and lightweight threads survive restarts.
   """
 
   use Jido.Messaging,
-    persistence: Jido.Messaging.Persistence.ETS,
+    persistence: Jido.Campfire.Persistence.SQLite,
     pubsub: Jido.Campfire.PubSub
 end

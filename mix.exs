@@ -46,6 +46,7 @@ defmodule Jido.Campfire.MixProject do
       {:phoenix_live_view, "~> 1.1.0"},
       {:hologram, "~> 0.9.1"},
       {:jido_messaging, path: "../jido_messaging"},
+      {:exqlite, "~> 0.36.0"},
       {:lazy_html, ">= 0.1.0", only: :test},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},

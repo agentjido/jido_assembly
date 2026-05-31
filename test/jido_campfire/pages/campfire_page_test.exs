@@ -44,7 +44,7 @@ defmodule Jido.Campfire.Pages.CampfireTest do
 
     assert %Command{
              name: :persist_message,
-             params: %{room_id: "room:general", body: "ship it"}
+             params: %{room_id: "room:general", body: "ship it", sender_id: "user:you"}
            } = component.next_command
   end
 
@@ -161,7 +161,14 @@ defmodule Jido.Campfire.Pages.CampfireTest do
       own: false,
       time: "07:20",
       body: "A test message.",
-      status: "sent"
+      status: "sent",
+      thread_id: nil,
+      reply_to_id: nil,
+      is_reply: false,
+      reply_count: 0,
+      mentioned_user_ids: [],
+      mentions_current_user: false,
+      reactions: []
     }
   end
 end

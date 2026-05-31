@@ -1,6 +1,6 @@
 # Jido Campfire
 
-`jido_campfire` is a Hologram/Phoenix spike for a Slack-like Jido workspace backed by `jido_messaging`.
+`jido_campfire` is a Hologram/Phoenix developer demo for a small Slack-like Jido workspace backed by `jido_messaging`.
 The package module prefix is `Jido.Campfire`.
 
 ## Run
@@ -16,16 +16,23 @@ Use `mix holo` instead of `mix phx.server` when working on Hologram pages. In
 dev and test, Hologram only starts when `HOLOGRAM_START=1`, which `mix holo`
 sets for you.
 
-## Spike Scope
+Campfire stores local demo state in `data/jido_campfire.sqlite3`. Delete that
+file if you want to reset the demo workspace.
+
+## Demo Scope
 
 - Hologram route at `/`
 - Responsive Slack-like shell with workspace rail, channels, timeline, composer,
-  and room context panel
-- One seeded workspace with multiple group chats and DMs
-- `Jido.Campfire.Messaging` using `Jido.Messaging.Persistence.ETS`
-- Messages, participants, DMs, and group rooms persisted through `jido_messaging`
-- Hologram realtime workspace broadcasts for sends and group chat creation
-- Client-side room switching, unread counters, and responsive mobile room switcher
+  and contextual thread panel
+- One seeded workspace with multiple channels and DMs
+- Demo user switcher for 5-10 user local testing without production auth
+- `Jido.Campfire.Messaging` using `Jido.Campfire.Persistence.SQLite`
+- Rooms, participants, messages, reactions, and threads persisted through
+  `jido_messaging`
+- Hologram realtime workspace broadcasts for sends, replies, reactions, and
+  channel creation
+- Mentions, local unread counters, lightweight thread replies, message search,
+  and responsive mobile room switcher
 - Phoenix fallback health page at `/health`
 
 ## Testing Story
@@ -58,12 +65,12 @@ Phoenix LiveView's built-in test ergonomics.
 
 `jido_messaging` currently pulls in a transitive Erlang dependency with BEAM debug info that Hologram `0.9.1` cannot reflect over. `mix setup` applies a narrow local patch to `deps/hologram/lib/hologram/reflection.ex` so unsupported BEAM debug info is skipped instead of crashing the Hologram compiler.
 
-## Next Slices
+## Intentional Non-Goals
 
-- Swap ETS for durable persistence
-- Add real user/workspace identity
-- Bind group rooms to Slack, Discord, or Mattermost adapters
-- Attach Room Assistant to room message signals
+- Full Slack API compatibility
+- Production authentication, authorization, billing, or compliance controls
+- File uploads, huddles, workflows, apps, Canvas, Lists, or enterprise admin
+- Jido-native Room Assistant and bridge-console showcase. That comes next.
 
 See `ROADMAP.md` for a fuller product and platform roadmap against Slack-like
 alternatives.
