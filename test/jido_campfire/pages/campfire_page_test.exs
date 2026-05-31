@@ -27,7 +27,10 @@ defmodule Jido.Campfire.Pages.CampfireTest do
     assert Enum.any?(component.state.developer_contract, &(&1.detail == "Jido.Chat.PostPayload"))
     assert component.state.last_event.title == "Workspace loaded"
     assert Enum.any?(component.state.channels, &(&1.id == "room:general"))
+    assert Enum.any?(component.state.channels, &(&1.id == "room:agent-lab"))
     assert Enum.any?(component.state.direct_messages, &(&1.id == "dm:maggie"))
+    assert Enum.any?(component.state.direct_messages, &(&1.id == "dm:alice"))
+    assert Enum.map(component.state.agent_demo.agents, & &1.name) == ["Alice", "Bob", "Charlie"]
     assert component.next_action == %Action{name: :presence_heartbeat, delay: 250}
     assert {{:workspace, Chat.workspace_id()}, "page"} in server.subscriptions
   end
@@ -149,6 +152,34 @@ defmodule Jido.Campfire.Pages.CampfireTest do
     assert %Command{
              name: :persist_message,
              params: %{room_id: "room:general", body: "enter submit", sender_id: "user:you"}
+           } = component.next_command
+  end
+
+  test "run_agent_round action requires the safety cap" do
+    {component, _server} = init_page(Campfire)
+    component = put_page_state(component, :agent_safety_enabled, false)
+
+    component = Campfire.action(:run_agent_round, %{}, component)
+
+    assert component.state.agent_error == "Turn the safety cap back on before running agents."
+    refute component.next_command
+  end
+
+  test "run_agent_round action queues a bounded server command" do
+    {component, _server} = init_page(Campfire)
+
+    component = Campfire.action(:run_agent_round, %{}, component)
+
+    assert component.state.agent_round_pending
+    assert component.state.agent_error == nil
+
+    assert %Command{
+             name: :run_agent_round,
+             params: %{
+               room_id: "room:general",
+               safety_enabled: true,
+               inter_agent_enabled: true
+             }
            } = component.next_command
   end
 
@@ -338,14 +369,56 @@ defmodule Jido.Campfire.Pages.CampfireTest do
     refute component.state.new_room_pending
   end
 
-  defp message_view(room_id) do
-    %{
-      id: "message:#{room_id}:#{System.unique_integer([:positive])}",
-      room_id: room_id,
+  test "agent_round_finished action stores agent messages in the active timeline" do
+    {component, _server} = init_page(Campfire)
+
+    messages = [
+      message_view("room:general",
+        sender_id: "agent:alice",
+        author: "Alice",
+        avatar: "AL",
+        tone: "bg-cyan-200 text-cyan-950"
+      )
+    ]
+
+    component = put_page_state(component, :agent_round_pending, true)
+
+    component =
+      Campfire.action(
+        :agent_round_finished,
+        %{
+          room_id: "room:general",
+          messages: messages,
+          agent_demo: component.state.agent_demo,
+          signal: %{type: "jido.messaging.room.message_added"}
+        },
+        component
+      )
+
+    refute component.state.agent_round_pending
+    assert component.state.agent_error == nil
+    assert Enum.any?(component.state.messages, &(&1.id == List.first(messages).id))
+    assert component.state.last_event.title == "Agent round stored"
+    assert component.state.last_event.layer == "Jido AI + Jido Messaging"
+  end
+
+  defp message_view(room_id, overrides \\ []) do
+    defaults = %{
       sender_id: "user:maggie",
       author: "Maggie",
       avatar: "MH",
-      tone: "bg-rose-200 text-rose-950",
+      tone: "bg-rose-200 text-rose-950"
+    }
+
+    profile = Map.merge(defaults, Map.new(overrides))
+
+    %{
+      id: "message:#{room_id}:#{System.unique_integer([:positive])}",
+      room_id: room_id,
+      sender_id: profile.sender_id,
+      author: profile.author,
+      avatar: profile.avatar,
+      tone: profile.tone,
       own: false,
       time: "07:20",
       body: "A test message.",

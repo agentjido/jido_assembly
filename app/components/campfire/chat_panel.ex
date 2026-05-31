@@ -5,6 +5,11 @@ defmodule Jido.Campfire.Components.Campfire.ChatPanel do
   prop :active_room_name, :string
   prop :active_room_prefix, :string
   prop :active_topic, :string
+  prop :agent_demo, :map
+  prop :agent_error, :any
+  prop :agent_inter_agent_enabled, :boolean
+  prop :agent_round_pending, :boolean
+  prop :agent_safety_enabled, :boolean
   prop :current_user, :map
   prop :draft, :string
   prop :error, :any
@@ -47,6 +52,58 @@ defmodule Jido.Campfire.Components.Campfire.ChatPanel do
             </button>
           {/for}
         </div>
+
+        <div class="mt-3 grid gap-2 rounded-md border border-[var(--campfire-line)] bg-[var(--campfire-panel-muted)] px-3 py-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div class="flex min-w-0 flex-wrap items-center gap-2">
+            <span class="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-[var(--campfire-muted)]">
+              <span class="hero-sparkles size-4"></span>
+              AI agents
+            </span>
+            {%for agent <- @agent_demo.agents}
+              <span class="inline-flex items-center gap-1.5 rounded-full border border-[var(--campfire-line)] bg-white px-2 py-1 text-xs font-semibold text-stone-700" title={agent.title}>
+                <span class="grid size-5 place-items-center rounded {agent.tone} text-[10px] font-black">{agent.initials}</span>
+                {agent.name}
+              </span>
+            {/for}
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <label class="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--campfire-line)] bg-white px-2.5 text-xs font-semibold text-stone-700">
+              <input
+                class="size-3.5 accent-[var(--campfire-accent)]"
+                type="checkbox"
+                checked={@agent_safety_enabled}
+                $change="agent_safety_changed"
+              />
+              Safety cap
+            </label>
+
+            <label class="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--campfire-line)] bg-white px-2.5 text-xs font-semibold text-stone-700">
+              <input
+                class="size-3.5 accent-[var(--campfire-accent)]"
+                type="checkbox"
+                checked={@agent_inter_agent_enabled}
+                $change="agent_inter_agent_changed"
+              />
+              Agent chat
+            </label>
+
+            <button
+              class="inline-flex h-8 items-center gap-2 rounded-md bg-stone-900 px-3 text-xs font-bold text-white transition hover:bg-stone-700 disabled:opacity-50"
+              type="button"
+              disabled={@agent_round_pending || @agent_demo.missing_api_key}
+              title="Run agent round"
+              $click="run_agent_round"
+            >
+              <span class="hero-bolt size-4"></span>
+              {%if @agent_round_pending}Running{%else}Run round{/if}
+            </button>
+          </div>
+        </div>
+
+        {%if @agent_error}
+          <p class="mt-2 text-sm font-semibold text-amber-700">{@agent_error}</p>
+        {/if}
       </header>
 
       <div class="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">

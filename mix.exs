@@ -46,9 +46,9 @@ defmodule Jido.Campfire.MixProject do
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_view, "~> 1.1.0"},
       {:hologram, "~> 0.9.1"},
-      # Temporary until the jido_messaging SQLite/signal APIs ship to Hex.
-      {:jido_messaging,
-       github: "agentjido/jido_messaging", branch: "codex/signal-events-campfire"},
+      # Temporary until the merged jido_messaging SQLite/signal APIs ship to Hex.
+      {:jido_messaging, github: "agentjido/jido_messaging", branch: "main"},
+      {:jido_ai, "~> 2.2"},
       {:lazy_html, ">= 0.1.0", only: :test},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},

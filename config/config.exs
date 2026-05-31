@@ -12,6 +12,14 @@ config :jido_campfire,
   generators: [timestamp_type: :utc_datetime],
   sqlite_path: "data/jido_campfire.sqlite3"
 
+config :jido_ai,
+  model_aliases: %{
+    campfire_haiku: "anthropic:claude-haiku-4-5"
+  },
+  llm_defaults: %{
+    text: %{model: :campfire_haiku, temperature: 0.45, max_tokens: 220, timeout: 30_000}
+  }
+
 # Configure the endpoint
 config :jido_campfire, Jido.CampfireWeb.Endpoint,
   url: [host: "localhost"],

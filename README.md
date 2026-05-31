@@ -3,8 +3,8 @@
 `jido_campfire` is a developer-level spike for a small Slack-like Jido
 workspace. It uses Hologram as the UI layer, Phoenix as the web shell,
 `jido_messaging` for durable chat primitives, SQLite for local persistence,
-Jido Signal-style events for UI updates, and Phoenix Presence for online
-state.
+Jido Signal-style events for UI updates, Phoenix Presence for online state, and
+`jido_ai` for bounded AI participants in chat.
 
 The package module prefix is `Jido.Campfire`.
 
@@ -20,6 +20,8 @@ The package module prefix is `Jido.Campfire`.
   `jido_messaging` and SQLite.
 - Hologram realtime broadcasts carrying compact `jido.messaging.*` signal
   metadata after durable writes commit.
+- Three seeded `jido_ai` participants, Alice, Bob, and Charlie, that can run a
+  safety-capped agent round and write normal assistant messages into a channel.
 - A thin Phoenix web layer: Phoenix hosts Hologram, health checks, static
   assets, and Presence integration while the chat behavior lives in the app
   context.
@@ -49,20 +51,31 @@ PORT=4002 mix holo
 Campfire stores local demo state in `data/jido_campfire.sqlite3`. Delete that
 file if you want to reset the demo workspace.
 
+To try the AI agent round, add an Anthropic key before starting the server:
+
+```sh
+cp .env.example .env
+# edit .env and set ANTHROPIC_API_KEY
+mix holo
+```
+
+Open `#agent-lab`, keep `Safety cap` enabled, and click `Run round`.
+
 ## Dependency Note
 
-Campfire temporarily depends on the `jido_messaging` PR branch that adds the
-SQLite and signal APIs used by this demo. After
+Campfire temporarily depends on the `jido_messaging` `main` branch because the
+SQLite and signal APIs from
 [agentjido/jido_messaging#24](https://github.com/agentjido/jido_messaging/pull/24)
-lands and ships to Hex, switch `mix.exs` back to the released package.
+are merged but not yet released to Hex. After a new Hex release ships, switch
+`mix.exs` back to the released package.
 
 ## Code Shape
 
 - `app/` contains Hologram pages, components, reducers, and server command
   handlers.
 - `lib/jido_campfire/` contains the Campfire backend context, read projections,
-  mentions, seeds, messaging integration, Presence adapter configuration, and
-  developer inspector data.
+  mentions, seeds, messaging integration, Presence adapter configuration,
+  Jido AI agent orchestration, and developer inspector data.
 - `lib/jido_campfire_web/` stays thin: endpoint, router, Phoenix Presence,
   Hologram presence notifier, and signal presentation for the UI.
 - `jido_messaging` owns the reusable messaging primitives and SQLite adapter;

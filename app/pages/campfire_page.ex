@@ -11,7 +11,7 @@ defmodule Jido.Campfire.Pages.Campfire do
     ThreadPanel
   }
 
-  alias Jido.Campfire.Chat
+  alias Jido.Campfire.{Agents, Chat}
   alias Jido.Campfire.Layouts.App
   alias Jido.Campfire.Pages.Campfire.{Commands, State}
 
@@ -27,6 +27,7 @@ defmodule Jido.Campfire.Pages.Campfire do
       component
       |> State.apply_snapshot(Chat.snapshot())
       |> put_state(State.initial_ui_state())
+      |> put_state(:agent_demo, Agents.snapshot())
       |> schedule_presence_heartbeat(@initial_presence_delay_ms)
 
     server = put_subscription(server, {:workspace, Chat.workspace_id()})
@@ -136,6 +137,31 @@ defmodule Jido.Campfire.Pages.Campfire do
         body: draft,
         sender_id: component.state.current_user.id
       )
+    end
+  end
+
+  def action(:agent_safety_changed, params, component) do
+    put_state(component, :agent_safety_enabled, event_checked(params))
+  end
+
+  def action(:agent_inter_agent_changed, params, component) do
+    put_state(component, :agent_inter_agent_enabled, event_checked(params))
+  end
+
+  def action(:run_agent_round, _params, component) do
+    cond do
+      !component.state.agent_safety_enabled ->
+        put_state(component, :agent_error, Agents.error_to_string(:safety_required))
+
+      true ->
+        component
+        |> put_state(:agent_round_pending, true)
+        |> put_state(:agent_error, nil)
+        |> put_command(:run_agent_round,
+          room_id: component.state.active_room_id,
+          safety_enabled: component.state.agent_safety_enabled,
+          inter_agent_enabled: component.state.agent_inter_agent_enabled
+        )
     end
   end
 
@@ -381,6 +407,49 @@ defmodule Jido.Campfire.Pages.Campfire do
     |> put_state(:new_room_error, params.error)
   end
 
+  def action(:agent_round_finished, params, component) do
+    messages =
+      Enum.map(
+        params.messages || [],
+        &State.personalize_message(&1, component.state.current_user.id)
+      )
+
+    component =
+      Enum.reduce(messages, component, fn message, acc ->
+        acc = State.put_timeline_message(acc, message.room_id, message)
+
+        rooms =
+          State.touch_room(
+            acc.state.rooms,
+            message.room_id,
+            acc.state.active_room_id,
+            message.own,
+            message.mentions_current_user
+          )
+
+        State.put_rooms(acc, rooms)
+      end)
+
+    component
+    |> put_state(:agent_round_pending, false)
+    |> put_state(:agent_error, nil)
+    |> put_state(:agent_demo, map_value(params, :agent_demo, component.state.agent_demo))
+    |> State.put_active_developer_context(
+      State.developer_event(
+        "Agent round stored",
+        "Jido AI + Jido Messaging",
+        signal_detail(params, "#{Enum.count(messages)} agent messages")
+      )
+    )
+  end
+
+  def action(:agent_round_failed, params, component) do
+    component
+    |> put_state(:agent_round_pending, false)
+    |> put_state(:agent_error, params.error)
+    |> put_state(:agent_demo, map_value(params, :agent_demo, component.state.agent_demo))
+  end
+
   def command(name, params, server), do: Commands.command(name, params, server)
 
   def template do
@@ -409,6 +478,11 @@ defmodule Jido.Campfire.Pages.Campfire do
           active_room_name={@active_room_name}
           active_room_prefix={@active_room_prefix}
           active_topic={@active_topic}
+          agent_demo={@agent_demo}
+          agent_error={@agent_error}
+          agent_inter_agent_enabled={@agent_inter_agent_enabled}
+          agent_round_pending={@agent_round_pending}
+          agent_safety_enabled={@agent_safety_enabled}
           current_user={@current_user}
           draft={@draft}
           error={@error}
@@ -448,6 +522,15 @@ defmodule Jido.Campfire.Pages.Campfire do
   defp event_value(%{"event" => %{"value" => value}}), do: value
   defp event_value(%{"value" => value}), do: value
   defp event_value(_params), do: ""
+
+  defp event_checked(%{event: %{checked: checked}}), do: truthy?(checked)
+  defp event_checked(%{checked: checked}), do: truthy?(checked)
+  defp event_checked(%{"event" => %{"checked" => checked}}), do: truthy?(checked)
+  defp event_checked(%{"checked" => checked}), do: truthy?(checked)
+  defp event_checked(params), do: truthy?(event_value(params))
+
+  defp truthy?(value) when value in [true, "true", "on", "1", 1], do: true
+  defp truthy?(_value), do: false
 
   defp submitted_form_value(params, key, fallback) do
     case form_value(params, key) do

@@ -104,6 +104,8 @@ defmodule Jido.Campfire.Chat do
     body = body |> to_string() |> String.trim()
     thread_id = opts[:thread_id]
     reply_to_id = opts[:reply_to_id] || thread_id
+    role = Keyword.get(opts, :role, :user)
+    metadata = Keyword.get(opts, :metadata, %{})
 
     cond do
       body == "" ->
@@ -117,7 +119,7 @@ defmodule Jido.Campfire.Chat do
                  %{
                    room_id: room.id,
                    sender_id: sender_id,
-                   role: :user,
+                   role: role,
                    content: [%{type: "text", text: body}],
                    reply_to_id: reply_to_id,
                    thread_id: thread_id,
@@ -128,6 +130,7 @@ defmodule Jido.Campfire.Chat do
                        room_kind: Projections.room_kind(room),
                        source: "jido_campfire"
                      }
+                     |> Map.merge(metadata)
                      |> Map.merge(Mentions.metadata(body))
                  },
                  signal_opts(room,

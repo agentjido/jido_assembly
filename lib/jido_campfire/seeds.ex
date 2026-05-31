@@ -66,6 +66,39 @@ defmodule Jido.Campfire.Seeds do
       tone: "bg-violet-200 text-violet-950"
     },
     %{
+      id: "agent:alice",
+      name: "Alice",
+      handle: "alice",
+      initials: "AL",
+      presence: :online,
+      title: "Architecture AI",
+      type: :agent,
+      capabilities: [:text, :ai],
+      tone: "bg-cyan-200 text-cyan-950"
+    },
+    %{
+      id: "agent:bob",
+      name: "Bob",
+      handle: "bob",
+      initials: "BO",
+      presence: :online,
+      title: "Implementation AI",
+      type: :agent,
+      capabilities: [:text, :ai],
+      tone: "bg-lime-200 text-lime-950"
+    },
+    %{
+      id: "agent:charlie",
+      name: "Charlie",
+      handle: "charlie",
+      initials: "CH",
+      presence: :online,
+      title: "Review AI",
+      type: :agent,
+      capabilities: [:text, :ai],
+      tone: "bg-amber-200 text-amber-950"
+    },
+    %{
       id: @system_user_id,
       name: "Campfire",
       handle: "campfire",
@@ -97,6 +130,13 @@ defmodule Jido.Campfire.Seeds do
       position: 30
     },
     %{
+      id: "room:agent-lab",
+      name: "agent-lab",
+      topic: "Bounded Jido AI agent rounds with Alice, Bob, and Charlie.",
+      position: 35,
+      agent_room: true
+    },
+    %{
       id: "room:design",
       name: "design",
       topic: "Campfire product surface and interaction model.",
@@ -107,7 +147,10 @@ defmodule Jido.Campfire.Seeds do
   @seed_dms [
     %{id: "dm:maggie", participant_id: "user:maggie", position: 110},
     %{id: "dm:nolan", participant_id: "user:nolan", position: 120},
-    %{id: "dm:priya", participant_id: "user:priya", position: 130}
+    %{id: "dm:priya", participant_id: "user:priya", position: 130},
+    %{id: "dm:alice", participant_id: "agent:alice", position: 210},
+    %{id: "dm:bob", participant_id: "agent:bob", position: 220},
+    %{id: "dm:charlie", participant_id: "agent:charlie", position: 230}
   ]
 
   @seed_messages %{
@@ -128,6 +171,12 @@ defmodule Jido.Campfire.Seeds do
        "Treat realtime as a notification layer, then read canonical records from jido_messaging."},
       {"user:maggie", "Persisted message IDs are the stable UI keys now."}
     ],
+    "room:agent-lab" => [
+      {"system:campfire",
+       "Alice, Bob, and Charlie are Jido AI participants. Add ANTHROPIC_API_KEY, keep the safety cap on, and run a bounded agent round."},
+      {"user:you",
+       "Let's use this room to see how AI agents can participate in a normal Campfire channel."}
+    ],
     "room:design" => [
       {"user:priya",
        "Keep the right panel contextual. Threads and room details can share that space."},
@@ -144,6 +193,16 @@ defmodule Jido.Campfire.Seeds do
     ],
     "dm:priya" => [
       {"user:priya", "Mobile needs a room switcher since the sidebar collapses."}
+    ],
+    "dm:alice" => [
+      {"agent:alice",
+       "Send me architecture questions from a room when you want a careful boundary pass."}
+    ],
+    "dm:bob" => [
+      {"agent:bob", "I can turn a rough idea into a small implementation path."}
+    ],
+    "dm:charlie" => [
+      {"agent:charlie", "I am useful when you want risk, test, and failure-mode review."}
     ]
   }
 
@@ -154,6 +213,10 @@ defmodule Jido.Campfire.Seeds do
   def default_room_id, do: @default_room_id
   def people, do: @people
   def reaction_options, do: @reaction_options
+
+  def agent_people do
+    Enum.filter(@people, &(Map.get(&1, :type) == :agent))
+  end
 
   def demo_users do
     @people
@@ -216,7 +279,7 @@ defmodule Jido.Campfire.Seeds do
                 tone: person.tone
               },
               presence: person.presence,
-              capabilities: [:text]
+              capabilities: Map.get(person, :capabilities, [:text])
             })
 
           :ok
@@ -234,7 +297,7 @@ defmodule Jido.Campfire.Seeds do
           workspace_id: @workspace_id,
           campfire_kind: "channel",
           topic: channel.topic,
-          member_ids: demo_user_ids(),
+          member_ids: channel_member_ids(channel),
           position: channel.position
         }
       })
@@ -269,6 +332,20 @@ defmodule Jido.Campfire.Seeds do
     end
   end
 
+  defp channel_member_ids(%{agent_room: true}),
+    do: demo_user_ids() ++ Enum.map(agent_people(), & &1.id)
+
+  defp channel_member_ids(_channel), do: demo_user_ids()
+
+  defp message_role(@system_user_id), do: :system
+
+  defp message_role(sender_id) do
+    case person_seed(sender_id) do
+      %{type: :agent} -> :assistant
+      _person -> :user
+    end
+  end
+
   defp seed_messages do
     Enum.each(@seed_messages, fn {room_id, messages} ->
       case Messaging.list_messages(room_id, limit: 1) do
@@ -284,7 +361,7 @@ defmodule Jido.Campfire.Seeds do
               Messaging.save_message(%{
                 room_id: room_id,
                 sender_id: sender_id,
-                role: :user,
+                role: message_role(sender_id),
                 content: [%{type: "text", text: text}],
                 status: :sent,
                 inserted_at: inserted_at,

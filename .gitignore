@@ -28,6 +28,11 @@ jido_campfire-*.tar
 # Local SQLite demo state.
 /data/
 
+# Local secrets.
+.env
+.env.*
+!.env.example
+
 # Ignore assets that are produced by build tools.
 /priv/static/assets/
 

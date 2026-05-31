@@ -9,7 +9,7 @@ defmodule Jido.Campfire.Pages.Campfire.Commands do
 
   import Hologram.Component, only: [put_action: 3, put_broadcast: 4]
 
-  alias Jido.Campfire.Chat
+  alias Jido.Campfire.{Agents, Chat}
   alias Jido.CampfireWeb.SignalPresenter
 
   def command(:load_snapshot, params, server) do
@@ -84,6 +84,27 @@ defmodule Jido.Campfire.Pages.Campfire.Commands do
 
       {:error, reason} ->
         put_action(server, :send_failed, error: Chat.error_to_string(reason))
+    end
+  end
+
+  def command(:run_agent_round, params, server) do
+    case Agents.run_round(params.room_id,
+           safety_enabled: Map.get(params, :safety_enabled, true),
+           inter_agent_enabled: Map.get(params, :inter_agent_enabled, true)
+         ) do
+      {:ok, result} ->
+        put_workspace_action(server, :agent_round_finished, %{
+          room_id: result.room_id,
+          messages: result.messages,
+          agent_demo: Agents.snapshot(),
+          signal: SignalPresenter.summary(result.signals, "jido.messaging.room.message_added")
+        })
+
+      {:error, reason} ->
+        put_action(server, :agent_round_failed,
+          error: Agents.error_to_string(reason),
+          agent_demo: Agents.snapshot()
+        )
     end
   end
 

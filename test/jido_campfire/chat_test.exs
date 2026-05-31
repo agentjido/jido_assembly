@@ -8,7 +8,9 @@ defmodule Jido.Campfire.ChatTest do
 
     assert snapshot.workspace.name == "Jido Campfire"
     assert Enum.any?(snapshot.channels, &(&1.id == "room:general"))
+    assert Enum.any?(snapshot.channels, &(&1.id == "room:agent-lab"))
     assert Enum.any?(snapshot.direct_messages, &(&1.id == "dm:maggie"))
+    assert Enum.any?(snapshot.direct_messages, &(&1.id == "dm:alice"))
     assert Map.has_key?(snapshot.messages_by_room, snapshot.active_room_id)
   end
 
@@ -57,6 +59,16 @@ defmodule Jido.Campfire.ChatTest do
 
     assert {:ok, persisted_message} = Jido.Campfire.Messaging.get_message(message.id)
     assert persisted_message.metadata.mention_handles == ["priya"]
+  end
+
+  test "send_message resolves agent mentions through persisted participants" do
+    body = "@alice can you review this? #{System.unique_integer([:positive])}"
+
+    assert {:ok, message} = Chat.send_message("room:agent-lab", body, "user:you")
+    assert "agent:alice" in message.mentioned_user_ids
+
+    assert {:ok, persisted_message} = Jido.Campfire.Messaging.get_message(message.id)
+    assert persisted_message.metadata.mention_handles == ["alice"]
   end
 
   test "toggle_reaction persists reaction state on messages" do

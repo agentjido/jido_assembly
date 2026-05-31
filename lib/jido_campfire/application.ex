@@ -9,6 +9,7 @@ defmodule Jido.Campfire.Application do
       Jido.CampfireWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:jido_campfire, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Jido.Campfire.PubSub},
+      Jido.Campfire.Jido,
       Jido.CampfireWeb.Presence,
       {Jido.Campfire.Messaging,
        persistence_opts: [
