@@ -1,0 +1,167 @@
+defmodule Jido.Campfire.Pages.CampfireTest do
+  use Jido.Campfire.HologramPageCase, async: false
+
+  alias Hologram.Component.Command
+  alias Hologram.Server.Broadcast
+  alias Jido.Campfire.Chat
+  alias Jido.Campfire.Pages.Campfire
+
+  test "init loads the workspace and subscribes the page to workspace broadcasts" do
+    {component, server} = init_page(Campfire)
+
+    assert component.state.workspace == %{id: "jido", name: "Jido Campfire"}
+    assert component.state.active_room_id == "room:general"
+    assert Enum.any?(component.state.channels, &(&1.id == "room:general"))
+    assert Enum.any?(component.state.direct_messages, &(&1.id == "dm:maggie"))
+    assert {{:workspace, Chat.workspace_id()}, "page"} in server.subscriptions
+  end
+
+  test "template evaluates against initialized page state" do
+    {component, _server} = init_page(Campfire)
+
+    assert [{:element, "main", _attrs, _children}] = Campfire.template().(component.state)
+  end
+
+  test "send_message action validates blank drafts before queueing a server command" do
+    {component, _server} = init_page(Campfire)
+    component = put_page_state(component, :draft, "   ")
+
+    component = Campfire.action(:send_message, %{}, component)
+
+    assert component.state.error == "Type a message first."
+    refute component.next_command
+  end
+
+  test "send_message action clears the composer and queues a persistence command" do
+    {component, _server} = init_page(Campfire)
+    component = put_page_state(component, :draft, "  ship it  ")
+
+    component = Campfire.action(:send_message, %{}, component)
+
+    assert component.state.draft == ""
+    assert component.state.send_pending
+    assert component.state.error == nil
+
+    assert %Command{
+             name: :persist_message,
+             params: %{room_id: "room:general", body: "ship it"}
+           } = component.next_command
+  end
+
+  test "persist_message command writes through jido_messaging and broadcasts a Hologram action" do
+    body = "hologram command test #{System.unique_integer([:positive])}"
+    server = %Server{cid: "page", instance_id: "command-test", session_id: "session-test"}
+
+    server =
+      Campfire.command(:persist_message, %{room_id: "room:general", body: body}, server)
+
+    assert [
+             %Broadcast{
+               channel: {:workspace, "jido"},
+               action_name: :message_saved,
+               params: %{room_id: "room:general", message: message}
+             }
+           ] = server.broadcasts
+
+    assert message.body == body
+    assert message.own
+  end
+
+  test "message_saved action updates inactive room state and unread count" do
+    {component, _server} = init_page(Campfire)
+    message = message_view("room:runtime")
+
+    component =
+      Campfire.action(:message_saved, %{room_id: "room:runtime", message: message}, component)
+
+    assert Enum.any?(component.state.messages_by_room["room:runtime"], &(&1.id == message.id))
+    assert Enum.find(component.state.rooms, &(&1.id == "room:runtime")).unread == 1
+    refute Enum.any?(component.state.messages, &(&1.id == message.id))
+  end
+
+  test "select_room action switches rooms and clears unread count" do
+    {component, _server} = init_page(Campfire)
+    message = message_view("room:runtime")
+
+    component =
+      Campfire.action(:message_saved, %{room_id: "room:runtime", message: message}, component)
+
+    component = Campfire.action(:select_room, %{id: "room:runtime"}, component)
+
+    assert component.state.active_room_id == "room:runtime"
+    assert Enum.find(component.state.rooms, &(&1.id == "room:runtime")).unread == 0
+    assert Enum.any?(component.state.messages, &(&1.id == message.id))
+  end
+
+  test "persist_channel command creates a group chat and broadcasts it" do
+    name = "hologram-test-#{System.unique_integer([:positive])}"
+    server = %Server{cid: "page", instance_id: "channel-test", session_id: "session-test"}
+
+    server = Campfire.command(:persist_channel, %{name: name, topic: "Testing Hologram"}, server)
+
+    assert [
+             %Broadcast{
+               channel: {:workspace, "jido"},
+               action_name: :room_created,
+               params: %{room: room, messages: [message]}
+             }
+           ] = server.broadcasts
+
+    assert room.kind == "channel"
+    assert room.name == name
+    assert message.room_id == room.id
+  end
+
+  test "room_created action adds the room to page state and resets the form" do
+    {component, _server} = init_page(Campfire)
+
+    room = %{
+      id: "room:test-created",
+      name: "test-created",
+      kind: "channel",
+      prefix: "#",
+      topic: "Created during action test.",
+      unread: 0,
+      online: nil,
+      presence: "active",
+      avatar: "#",
+      tone: "bg-[var(--campfire-accent)] text-stone-950",
+      member_count: 1,
+      member_count_label: "1 member",
+      position: 1
+    }
+
+    message = message_view(room.id)
+
+    component =
+      component
+      |> put_page_state(:room_form_open, true)
+      |> put_page_state(:new_room_name, "test-created")
+      |> put_page_state(:new_room_topic, "Created during action test.")
+      |> put_page_state(:new_room_pending, true)
+
+    component = Campfire.action(:room_created, %{room: room, messages: [message]}, component)
+
+    assert Enum.any?(component.state.channels, &(&1.id == room.id))
+    assert component.state.messages_by_room[room.id] == [message]
+    refute component.state.room_form_open
+    assert component.state.new_room_name == ""
+    assert component.state.new_room_topic == ""
+    refute component.state.new_room_pending
+  end
+
+  defp message_view(room_id) do
+    %{
+      id: "message:#{room_id}:#{System.unique_integer([:positive])}",
+      room_id: room_id,
+      sender_id: "user:maggie",
+      author: "Maggie",
+      avatar: "MH",
+      tone: "bg-rose-200 text-rose-950",
+      own: false,
+      time: "07:20",
+      body: "A test message.",
+      status: "sent"
+    }
+  end
+end
