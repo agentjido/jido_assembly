@@ -36,10 +36,9 @@ defmodule Jido.Campfire.Persistence.SQLite do
 
   @impl true
   def save_room(state, room) do
-    with {:ok, room} <- ETS.save_room(state.ets, room),
-         :ok <- upsert_record(state, "room", room.id, room, room_id: room.id) do
-      {:ok, room}
-    end
+    persist_then_cache(state, "room", room.id, room, [room_id: room.id], fn ->
+      ETS.save_room(state.ets, room)
+    end)
   end
 
   @impl true
@@ -47,8 +46,8 @@ defmodule Jido.Campfire.Persistence.SQLite do
 
   @impl true
   def delete_room(state, room_id) do
-    with :ok <- ETS.delete_room(state.ets, room_id),
-         :ok <- delete_room_records(state, room_id) do
+    with :ok <- delete_room_records(state, room_id),
+         :ok <- ETS.delete_room(state.ets, room_id) do
       :ok
     end
   end
@@ -58,10 +57,9 @@ defmodule Jido.Campfire.Persistence.SQLite do
 
   @impl true
   def save_participant(state, participant) do
-    with {:ok, participant} <- ETS.save_participant(state.ets, participant),
-         :ok <- upsert_record(state, "participant", participant.id, participant) do
-      {:ok, participant}
-    end
+    persist_then_cache(state, "participant", participant.id, participant, [], fn ->
+      ETS.save_participant(state.ets, participant)
+    end)
   end
 
   @impl true
@@ -69,23 +67,26 @@ defmodule Jido.Campfire.Persistence.SQLite do
 
   @impl true
   def delete_participant(state, participant_id) do
-    with :ok <- ETS.delete_participant(state.ets, participant_id),
-         :ok <- delete_record(state, "participant", participant_id) do
+    with :ok <- delete_record(state, "participant", participant_id),
+         :ok <- ETS.delete_participant(state.ets, participant_id) do
       :ok
     end
   end
 
   @impl true
   def save_message(state, %Message{} = message) do
-    with {:ok, message} <- ETS.save_message(state.ets, message),
-         :ok <-
-           upsert_record(state, "message", message.id, message,
-             room_id: message.room_id,
-             thread_id: message.thread_id,
-             inserted_at: message.inserted_at
-           ) do
-      {:ok, message}
-    end
+    persist_then_cache(
+      state,
+      "message",
+      message.id,
+      message,
+      [
+        room_id: message.room_id,
+        thread_id: message.thread_id,
+        inserted_at: message.inserted_at
+      ],
+      fn -> ETS.save_message(state.ets, message) end
+    )
   end
 
   @impl true
@@ -96,22 +97,22 @@ defmodule Jido.Campfire.Persistence.SQLite do
 
   @impl true
   def delete_message(state, message_id) do
-    with :ok <- ETS.delete_message(state.ets, message_id),
-         :ok <- delete_record(state, "message", message_id) do
+    with :ok <- delete_record(state, "message", message_id),
+         :ok <- ETS.delete_message(state.ets, message_id) do
       :ok
     end
   end
 
   @impl true
   def save_thread(state, %Thread{} = thread) do
-    with {:ok, thread} <- ETS.save_thread(state.ets, thread),
-         :ok <-
-           upsert_record(state, "thread", thread.id, thread,
-             room_id: thread.room_id,
-             inserted_at: thread.inserted_at
-           ) do
-      {:ok, thread}
-    end
+    persist_then_cache(
+      state,
+      "thread",
+      thread.id,
+      thread,
+      [room_id: thread.room_id, inserted_at: thread.inserted_at],
+      fn -> ETS.save_thread(state.ets, thread) end
+    )
   end
 
   @impl true
@@ -132,25 +133,73 @@ defmodule Jido.Campfire.Persistence.SQLite do
 
   @impl true
   def get_or_create_room_by_external_binding(state, channel, bridge_id, external_id, attrs) do
-    with {:ok, room} <-
-           ETS.get_or_create_room_by_external_binding(
-             state.ets,
-             channel,
-             bridge_id,
-             external_id,
-             attrs
-           ),
-         :ok <- upsert_record(state, "room", room.id, room, room_id: room.id) do
-      {:ok, room}
+    case ETS.get_room_by_external_binding(state.ets, channel, bridge_id, external_id) do
+      {:ok, room} ->
+        {:ok, room}
+
+      {:error, :not_found} ->
+        with {:ok, room} <-
+               ETS.get_or_create_room_by_external_binding(
+                 state.ets,
+                 channel,
+                 bridge_id,
+                 external_id,
+                 attrs
+               ) do
+          case upsert_record(state, "room", room.id, room, room_id: room.id) do
+            :ok ->
+              {:ok, room}
+
+            {:error, reason} ->
+              binding_key = {channel, to_string(bridge_id), to_string(external_id)}
+              _ = :ets.delete_object(state.ets.room_bindings, {binding_key, room.id})
+              _ = ETS.delete_room(state.ets, room.id)
+              {:error, reason}
+          end
+        end
     end
   end
 
   @impl true
   def get_or_create_participant_by_external_id(state, channel, external_id, attrs) do
-    with {:ok, participant} <-
-           ETS.get_or_create_participant_by_external_id(state.ets, channel, external_id, attrs),
-         :ok <- upsert_record(state, "participant", participant.id, participant) do
-      {:ok, participant}
+    binding_key = {channel, external_id}
+
+    case :ets.lookup(state.ets.participant_bindings, binding_key) do
+      [{^binding_key, participant_id}] ->
+        case ETS.get_participant(state.ets, participant_id) do
+          {:ok, _participant} = ok ->
+            ok
+
+          {:error, :not_found} ->
+            true =
+              :ets.delete_object(state.ets.participant_bindings, {binding_key, participant_id})
+
+            get_or_create_participant_by_external_id(state, channel, external_id, attrs)
+        end
+
+      [] ->
+        with {:ok, participant} <-
+               ETS.get_or_create_participant_by_external_id(
+                 state.ets,
+                 channel,
+                 external_id,
+                 attrs
+               ) do
+          case upsert_record(state, "participant", participant.id, participant) do
+            :ok ->
+              {:ok, participant}
+
+            {:error, reason} ->
+              _ =
+                :ets.delete_object(
+                  state.ets.participant_bindings,
+                  {binding_key, participant.id}
+                )
+
+              _ = ETS.delete_participant(state.ets, participant.id)
+              {:error, reason}
+          end
+        end
     end
   end
 
@@ -161,14 +210,21 @@ defmodule Jido.Campfire.Persistence.SQLite do
 
   @impl true
   def update_message_external_id(state, message_id, external_id) do
-    with {:ok, message} <- ETS.update_message_external_id(state.ets, message_id, external_id),
-         :ok <-
-           upsert_record(state, "message", message.id, message,
-             room_id: message.room_id,
-             thread_id: message.thread_id,
-             inserted_at: message.inserted_at
-           ) do
-      {:ok, message}
+    with {:ok, message} <- ETS.get_message(state.ets, message_id) do
+      updated_message = %{message | external_id: external_id}
+
+      persist_then_cache(
+        state,
+        "message",
+        updated_message.id,
+        updated_message,
+        [
+          room_id: updated_message.room_id,
+          thread_id: updated_message.thread_id,
+          inserted_at: updated_message.inserted_at
+        ],
+        fn -> ETS.update_message_external_id(state.ets, message_id, external_id) end
+      )
     end
   end
 
@@ -180,9 +236,15 @@ defmodule Jido.Campfire.Persistence.SQLite do
   @impl true
   def create_room_binding(state, room_id, channel, bridge_id, external_id, attrs) do
     with {:ok, %RoomBinding{} = binding} <-
-           ETS.create_room_binding(state.ets, room_id, channel, bridge_id, external_id, attrs),
-         :ok <- upsert_record(state, "room_binding", binding.id, binding, room_id: room_id) do
-      {:ok, binding}
+           ETS.create_room_binding(state.ets, room_id, channel, bridge_id, external_id, attrs) do
+      case upsert_record(state, "room_binding", binding.id, binding, room_id: room_id) do
+        :ok ->
+          {:ok, binding}
+
+        {:error, reason} ->
+          _ = ETS.delete_room_binding(state.ets, binding.id)
+          {:error, reason}
+      end
     end
   end
 
@@ -191,8 +253,8 @@ defmodule Jido.Campfire.Persistence.SQLite do
 
   @impl true
   def delete_room_binding(state, binding_id) do
-    with :ok <- ETS.delete_room_binding(state.ets, binding_id),
-         :ok <- delete_record(state, "room_binding", binding_id) do
+    with :ok <- delete_record(state, "room_binding", binding_id),
+         :ok <- ETS.delete_room_binding(state.ets, binding_id) do
       :ok
     end
   end
@@ -218,10 +280,9 @@ defmodule Jido.Campfire.Persistence.SQLite do
     onboarding_id =
       Map.get(onboarding_flow, :onboarding_id) || Map.get(onboarding_flow, "onboarding_id")
 
-    with {:ok, onboarding_flow} <- ETS.save_onboarding(state.ets, onboarding_flow),
-         :ok <- upsert_record(state, "onboarding", onboarding_id, onboarding_flow) do
-      {:ok, onboarding_flow}
-    end
+    persist_then_cache(state, "onboarding", onboarding_id, onboarding_flow, [], fn ->
+      ETS.save_onboarding(state.ets, onboarding_flow)
+    end)
   end
 
   @impl true
@@ -229,10 +290,9 @@ defmodule Jido.Campfire.Persistence.SQLite do
 
   @impl true
   def save_bridge_config(state, bridge_config) do
-    with {:ok, bridge_config} <- ETS.save_bridge_config(state.ets, bridge_config),
-         :ok <- upsert_record(state, "bridge_config", bridge_config.id, bridge_config) do
-      {:ok, bridge_config}
-    end
+    persist_then_cache(state, "bridge_config", bridge_config.id, bridge_config, [], fn ->
+      ETS.save_bridge_config(state.ets, bridge_config)
+    end)
   end
 
   @impl true
@@ -243,8 +303,8 @@ defmodule Jido.Campfire.Persistence.SQLite do
 
   @impl true
   def delete_bridge_config(state, bridge_id) do
-    with :ok <- ETS.delete_bridge_config(state.ets, bridge_id),
-         :ok <- delete_record(state, "bridge_config", bridge_id) do
+    with :ok <- delete_record(state, "bridge_config", bridge_id),
+         :ok <- ETS.delete_bridge_config(state.ets, bridge_id) do
       :ok
     end
   end
@@ -253,13 +313,14 @@ defmodule Jido.Campfire.Persistence.SQLite do
   def save_ingress_subscription(state, %IngressSubscription{} = subscription) do
     id = "#{subscription.bridge_id}:#{subscription.subscription_id}"
 
-    with {:ok, subscription} <- ETS.save_ingress_subscription(state.ets, subscription),
-         :ok <-
-           upsert_record(state, "ingress_subscription", id, subscription,
-             room_id: subscription.bridge_id
-           ) do
-      {:ok, subscription}
-    end
+    persist_then_cache(
+      state,
+      "ingress_subscription",
+      id,
+      subscription,
+      [room_id: subscription.bridge_id],
+      fn -> ETS.save_ingress_subscription(state.ets, subscription) end
+    )
   end
 
   @impl true
@@ -269,21 +330,22 @@ defmodule Jido.Campfire.Persistence.SQLite do
 
   @impl true
   def delete_ingress_subscription(state, bridge_id, subscription_id) do
-    with :ok <- ETS.delete_ingress_subscription(state.ets, bridge_id, subscription_id),
-         :ok <- delete_record(state, "ingress_subscription", "#{bridge_id}:#{subscription_id}") do
+    with :ok <- delete_record(state, "ingress_subscription", "#{bridge_id}:#{subscription_id}"),
+         :ok <- ETS.delete_ingress_subscription(state.ets, bridge_id, subscription_id) do
       :ok
     end
   end
 
   @impl true
   def save_routing_policy(state, routing_policy) do
-    with {:ok, routing_policy} <- ETS.save_routing_policy(state.ets, routing_policy),
-         :ok <-
-           upsert_record(state, "routing_policy", routing_policy.room_id, routing_policy,
-             room_id: routing_policy.room_id
-           ) do
-      {:ok, routing_policy}
-    end
+    persist_then_cache(
+      state,
+      "routing_policy",
+      routing_policy.room_id,
+      routing_policy,
+      [room_id: routing_policy.room_id],
+      fn -> ETS.save_routing_policy(state.ets, routing_policy) end
+    )
   end
 
   @impl true
@@ -291,8 +353,8 @@ defmodule Jido.Campfire.Persistence.SQLite do
 
   @impl true
   def delete_routing_policy(state, room_id) do
-    with :ok <- ETS.delete_routing_policy(state.ets, room_id),
-         :ok <- delete_record(state, "routing_policy", room_id) do
+    with :ok <- delete_record(state, "routing_policy", room_id),
+         :ok <- ETS.delete_routing_policy(state.ets, room_id) do
       :ok
     end
   end
@@ -371,6 +433,22 @@ defmodule Jido.Campfire.Persistence.SQLite do
     true = :ets.insert(ets.room_bindings_by_room, {binding.room_id, binding.id})
 
     {:ok, binding}
+  end
+
+  defp persist_then_cache(state, kind, id, record, opts, cache_fun) do
+    with :ok <- upsert_record(state, kind, id, record, opts) do
+      case cache_fun.() do
+        {:ok, cached_record} ->
+          {:ok, cached_record}
+
+        :ok ->
+          :ok
+
+        {:error, reason} ->
+          _ = delete_record(state, kind, id)
+          {:error, reason}
+      end
+    end
   end
 
   defp upsert_record(state, kind, id, record, opts \\ []) do

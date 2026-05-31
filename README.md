@@ -23,12 +23,14 @@ file if you want to reset the demo workspace.
 
 - Hologram route at `/`
 - Responsive Slack-like shell with workspace rail, channels, timeline, composer,
-  and contextual thread panel
+  contextual thread panel, and mobile thread drawer
 - One seeded workspace with multiple channels and DMs
 - Demo user switcher for 5-10 user local testing without production auth
 - `Jido.Campfire.Messaging` using `Jido.Campfire.Persistence.SQLite`
 - Rooms, participants, messages, reactions, and threads persisted through
   `jido_messaging`
+- Developer inspector showing the live Hologram, `jido_messaging`,
+  SQLite, `jido_chat`, and Jido responsibilities for the active room
 - Hologram realtime workspace broadcasts for sends, replies, reactions, and
   channel creation
 - Mentions, local unread counters, lightweight thread replies, message search,
@@ -42,6 +44,10 @@ Campfire now has Hologram-focused ExUnit coverage in
 parts of Hologram that are most testable today: page `init/3`, template
 evaluation, client `action/3` state transitions, server `command/3` handling,
 and queued Hologram broadcasts.
+
+The SQLite adapter has focused tests for restart durability and failed durable
+write/delete behavior so the demo does not show messages in ETS that SQLite
+rejected.
 
 Compared with Phoenix LiveView testing, this is lower-level. Hologram actions
 and commands are easy to unit test because they return `%Hologram.Component{}`

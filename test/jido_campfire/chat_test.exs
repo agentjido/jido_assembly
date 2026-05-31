@@ -12,6 +12,19 @@ defmodule Jido.Campfire.ChatTest do
     assert Map.has_key?(snapshot.messages_by_room, snapshot.active_room_id)
   end
 
+  test "snapshot exposes the developer showcase stack" do
+    showcase = Chat.snapshot().developer_showcase
+
+    stack_names = Enum.map(showcase.stack, & &1.name)
+    assert "Hologram" in stack_names
+    assert "Jido Messaging" in stack_names
+    assert "Jido Chat" in stack_names
+    assert "Jido" in stack_names
+
+    assert Enum.any?(showcase.chat_contract, &(&1.detail == "Jido.Chat.MessagingTarget"))
+    assert Enum.any?(showcase.capabilities, &(&1.feature == "Threads"))
+  end
+
   test "send_message persists through jido_messaging" do
     body = "test message #{System.unique_integer([:positive])}"
 

@@ -164,6 +164,13 @@ defmodule Jido.Campfire.Pages.Campfire do
     |> put_state(:reply_pending, false)
     |> put_state(:error, nil)
     |> put_state(:reply_error, nil)
+    |> put_active_developer_context(
+      developer_event(
+        if(Map.get(message, :is_reply, false), do: "Reply stored", else: "Message stored"),
+        "Jido Messaging broadcast",
+        "#{message.author} in #{room_label(component, room_id)}"
+      )
+    )
   end
 
   def action(:send_failed, params, component) do
@@ -184,7 +191,15 @@ defmodule Jido.Campfire.Pages.Campfire do
   def action(:reaction_saved, params, component) do
     message = personalize_message(params.message, component.state.current_user.id)
 
-    update_message_everywhere(component, message)
+    component
+    |> update_message_everywhere(message)
+    |> put_active_developer_context(
+      developer_event(
+        "Reaction stored",
+        "Jido Messaging update",
+        "#{message.author} in #{room_label(component, message.room_id)}"
+      )
+    )
   end
 
   def action(:open_thread, params, component) do
@@ -197,6 +212,13 @@ defmodule Jido.Campfire.Pages.Campfire do
     |> put_state(:thread_messages, thread_messages)
     |> put_state(:reply_draft, "")
     |> put_state(:reply_error, nil)
+    |> put_active_developer_context(
+      developer_event(
+        "Thread opened",
+        "Hologram action",
+        if(root, do: root.author, else: "missing message")
+      )
+    )
   end
 
   def action(:close_thread, _params, component) do
@@ -206,6 +228,9 @@ defmodule Jido.Campfire.Pages.Campfire do
     |> put_state(:thread_messages, [])
     |> put_state(:reply_draft, "")
     |> put_state(:reply_error, nil)
+    |> put_active_developer_context(
+      developer_event("Thread closed", "Hologram action", component.state.active_room_name)
+    )
   end
 
   def action(:search_changed, params, component) do
@@ -285,15 +310,26 @@ defmodule Jido.Campfire.Pages.Campfire do
     messages_by_room = Map.put(component.state.messages_by_room, room.id, messages)
     threads_by_room = Map.put(component.state.threads_by_room, room.id, %{})
 
+    contracts_by_room =
+      Map.put(
+        component.state.developer_contract_by_room,
+        room.id,
+        fallback_developer_contract(room)
+      )
+
     component
     |> put_rooms(rooms)
     |> put_state(:messages_by_room, messages_by_room)
     |> put_state(:threads_by_room, threads_by_room)
+    |> put_state(:developer_contract_by_room, contracts_by_room)
     |> put_state(:room_form_open, false)
     |> put_state(:new_room_name, "")
     |> put_state(:new_room_topic, "")
     |> put_state(:new_room_pending, false)
     |> put_state(:new_room_error, nil)
+    |> put_active_developer_context(
+      developer_event("Room created", "Jido Messaging room", "#{room.prefix}#{room.name}")
+    )
   end
 
   def action(:room_create_failed, params, component) do
@@ -624,7 +660,7 @@ defmodule Jido.Campfire.Pages.Campfire do
                       {/for}
                       {%for emoji <- @reaction_options}
                         <button
-                          class="rounded-full border border-[var(--campfire-line)] bg-transparent px-2 py-0.5 text-xs font-semibold text-stone-500 opacity-0 transition hover:bg-[var(--campfire-panel-muted)] group-hover:opacity-100"
+                          class="rounded-full border border-[var(--campfire-line)] bg-transparent px-2 py-0.5 text-xs font-semibold text-stone-500 opacity-100 transition hover:bg-[var(--campfire-panel-muted)] focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                           type="button"
                           $click={:toggle_reaction, message_id: message.id, emoji: emoji}
                         >
@@ -666,6 +702,67 @@ defmodule Jido.Campfire.Pages.Campfire do
             {/if}
           </footer>
         </section>
+
+        {%if @thread_open && @thread_root}
+          <div class="fixed inset-x-0 bottom-0 z-30 max-h-[82vh] overflow-hidden border-t border-[var(--campfire-line)] bg-[var(--campfire-panel-muted)] shadow-2xl xl:hidden" role="dialog" aria-label="Thread">
+            <header class="border-b border-[var(--campfire-line)] px-4 py-3">
+              <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <h2 class="text-sm font-bold text-[var(--campfire-ink)]">Thread</h2>
+                  <p class="mt-1 truncate text-sm text-[var(--campfire-muted)]">{@active_room_prefix} {@active_room_name}</p>
+                </div>
+                <button class="grid size-9 shrink-0 place-items-center rounded-md text-[var(--campfire-muted)] transition hover:bg-stone-200" type="button" title="Close thread" $click="close_thread">
+                  <span class="hero-x-mark size-5"></span>
+                </button>
+              </div>
+            </header>
+            <div class="max-h-[52vh] overflow-y-auto px-4 py-4">
+              <article class="flex gap-3 rounded-md border border-[var(--campfire-line)] bg-[var(--campfire-panel)] p-3">
+                <div class="grid size-9 shrink-0 place-items-center rounded-md {@thread_root.tone} text-xs font-black">{@thread_root.avatar}</div>
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-baseline gap-2">
+                    <h3 class="text-sm font-bold text-[var(--campfire-ink)]">{@thread_root.author}</h3>
+                    <time class="text-xs text-[var(--campfire-muted)]">{@thread_root.time}</time>
+                  </div>
+                  <p class="mt-1 text-sm leading-6 text-stone-700">{@thread_root.body}</p>
+                </div>
+              </article>
+
+              <div class="mt-4 space-y-4">
+                {%for reply <- @thread_messages}
+                  <article class="flex gap-3">
+                    <div class="grid size-8 shrink-0 place-items-center rounded-md {reply.tone} text-xs font-black">{reply.avatar}</div>
+                    <div class="min-w-0">
+                      <div class="flex flex-wrap items-baseline gap-2">
+                        <h3 class="text-sm font-bold text-[var(--campfire-ink)]">{reply.author}</h3>
+                        <time class="text-xs text-[var(--campfire-muted)]">{reply.time}</time>
+                      </div>
+                      <p class="mt-1 text-sm leading-6 text-stone-700">{reply.body}</p>
+                    </div>
+                  </article>
+                {/for}
+              </div>
+            </div>
+            <footer class="border-t border-[var(--campfire-line)] p-3">
+              <form class="flex items-end gap-2 rounded-md border border-[var(--campfire-line)] bg-[var(--campfire-panel)] p-2" $submit="send_reply">
+                <textarea
+                  class="min-h-10 flex-1 resize-none rounded-md bg-transparent px-2 py-2 text-sm text-[var(--campfire-ink)] outline-none placeholder:text-stone-400"
+                  name="reply"
+                  placeholder="Reply in thread"
+                  rows="1"
+                  value={@reply_draft}
+                  $change="reply_draft_changed"
+                />
+                <button class="grid size-9 shrink-0 place-items-center rounded-md bg-[var(--campfire-ink)] text-stone-100 transition hover:bg-stone-800 disabled:opacity-60" type="submit" disabled={@reply_pending} title="Send reply">
+                  <span class="hero-paper-airplane size-4"></span>
+                </button>
+              </form>
+              {%if @reply_error}
+                <p class="mt-2 text-sm font-semibold text-amber-700">{@reply_error}</p>
+              {/if}
+            </footer>
+          </div>
+        {/if}
 
         <aside class="hidden min-h-0 flex-col border-l border-[var(--campfire-line)] bg-[var(--campfire-panel-muted)] xl:flex">
           {%if @thread_open && @thread_root}
@@ -727,38 +824,75 @@ defmodule Jido.Campfire.Pages.Campfire do
             </footer>
           {%else}
             <header class="border-b border-[var(--campfire-line)] px-5 py-4">
-              <h2 class="text-sm font-bold text-[var(--campfire-ink)]">Room context</h2>
+              <h2 class="text-sm font-bold text-[var(--campfire-ink)]">Developer inspector</h2>
               <p class="mt-1 text-sm text-[var(--campfire-muted)]">{@active_room_prefix} {@active_room_name}</p>
             </header>
             <div class="space-y-5 overflow-y-auto p-5">
               <section>
-                <h3 class="mb-2 text-xs font-semibold text-[var(--campfire-muted)]">Conversation</h3>
+                <h3 class="mb-2 text-xs font-semibold text-[var(--campfire-muted)]">Conversation state</h3>
                 <div class="space-y-2">
-                  <div class="flex items-center justify-between rounded-md border border-[var(--campfire-line)] bg-[var(--campfire-panel)] px-3 py-2 text-sm">
-                    <span>Type</span>
-                    <span class="font-semibold text-stone-700">{@active_room_kind}</span>
+                  {%for metric <- @developer_room_metrics}
+                    <div class="flex items-center justify-between rounded-md border border-[var(--campfire-line)] bg-[var(--campfire-panel)] px-3 py-2 text-sm">
+                      <span>{metric.label}</span>
+                      <span class="font-semibold text-stone-700">{metric.value}</span>
+                    </div>
+                  {/for}
+                </div>
+              </section>
+
+              <section>
+                <h3 class="mb-2 text-xs font-semibold text-[var(--campfire-muted)]">Last event</h3>
+                <div class="rounded-md border border-[var(--campfire-line)] bg-[var(--campfire-panel)] p-3 text-sm">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="font-bold text-stone-800">{@last_event.title}</span>
+                    <span class="rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">{@last_event.layer}</span>
                   </div>
-                  <div class="flex items-center justify-between rounded-md border border-[var(--campfire-line)] bg-[var(--campfire-panel)] px-3 py-2 text-sm">
-                    <span>Messages</span>
-                    <span class="font-semibold text-stone-700">{@message_count}</span>
-                  </div>
-                  <div class="flex items-center justify-between rounded-md border border-[var(--campfire-line)] bg-[var(--campfire-panel)] px-3 py-2 text-sm">
-                    <span>Durability</span>
-                    <span class="text-xs font-semibold text-emerald-700">SQLite</span>
-                  </div>
-                  <div class="flex items-center justify-between rounded-md border border-[var(--campfire-line)] bg-[var(--campfire-panel)] px-3 py-2 text-sm">
-                    <span>Realtime</span>
-                    <span class="text-xs font-semibold text-emerald-700">Hologram</span>
-                  </div>
+                  <p class="mt-2 leading-6 text-stone-700">{@last_event.detail}</p>
+                </div>
+              </section>
+
+              <section>
+                <h3 class="mb-2 text-xs font-semibold text-[var(--campfire-muted)]">Jido Chat contract</h3>
+                <div class="space-y-2">
+                  {%for item <- @developer_contract}
+                    <div class="rounded-md border border-[var(--campfire-line)] bg-[var(--campfire-panel)] px-3 py-2 text-sm">
+                      <div class="flex items-center justify-between gap-3">
+                        <span>{item.label}</span>
+                        <span class="font-semibold text-stone-700">{item.value}</span>
+                      </div>
+                      <p class="mt-1 text-xs leading-5 text-[var(--campfire-muted)]">{item.detail}</p>
+                    </div>
+                  {/for}
+                </div>
+              </section>
+
+              <section>
+                <h3 class="mb-2 text-xs font-semibold text-[var(--campfire-muted)]">Stack path</h3>
+                <div class="space-y-2">
+                  {%for layer <- @developer_stack}
+                    <div class="rounded-md border border-[var(--campfire-line)] bg-[var(--campfire-panel)] p-3">
+                      <div class="flex items-center justify-between gap-3">
+                        <h4 class="text-sm font-bold text-[var(--campfire-ink)]">{layer.name}</h4>
+                        <span class="rounded-md bg-[var(--campfire-panel-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--campfire-muted)]">{layer.badge}</span>
+                      </div>
+                      <p class="mt-2 text-xs leading-5 text-stone-700">{layer.role}</p>
+                    </div>
+                  {/for}
                 </div>
               </section>
 
               <section>
                 <h3 class="mb-2 text-xs font-semibold text-[var(--campfire-muted)]">Demo scope</h3>
-                <div class="rounded-md border border-[var(--campfire-line)] bg-[var(--campfire-panel)] p-3">
-                  <p class="text-sm leading-6 text-stone-700">
-                    One workspace, channels, DMs, demo users, mentions, reactions, thread replies, and search. No Slack API compatibility or production auth.
-                  </p>
+                <div class="space-y-2">
+                  {%for capability <- @developer_capabilities}
+                    <div class="rounded-md border border-[var(--campfire-line)] bg-[var(--campfire-panel)] px-3 py-2 text-sm">
+                      <div class="flex items-center justify-between gap-3">
+                        <span class="font-semibold text-stone-800">{capability.feature}</span>
+                        <span class="text-xs font-semibold {if capability.status == "implemented" do "text-emerald-700" else "text-stone-500" end}">{capability.status}</span>
+                      </div>
+                      <p class="mt-1 text-xs leading-5 text-[var(--campfire-muted)]">{capability.detail}</p>
+                    </div>
+                  {/for}
                 </div>
               </section>
             </div>
@@ -789,6 +923,12 @@ defmodule Jido.Campfire.Pages.Campfire do
     |> put_state(:member_count_label, snapshot.member_count_label)
     |> put_state(:messages, snapshot.messages)
     |> put_state(:message_count, Enum.count(snapshot.messages))
+    |> put_state(:developer_stack, snapshot.developer_showcase.stack)
+    |> put_state(:developer_capabilities, snapshot.developer_showcase.capabilities)
+    |> put_state(:developer_contract_by_room, snapshot.developer_showcase.contracts_by_room)
+    |> put_state(:developer_contract, snapshot.developer_showcase.chat_contract)
+    |> put_state(:developer_room_metrics, snapshot.developer_showcase.room_metrics)
+    |> put_state(:last_event, snapshot.developer_showcase.last_event)
   end
 
   defp select_room(component, room_id) do
@@ -813,12 +953,78 @@ defmodule Jido.Campfire.Pages.Campfire do
     |> put_state(:thread_open, false)
     |> put_state(:thread_root, nil)
     |> put_state(:thread_messages, [])
+    |> put_active_developer_context(
+      developer_event("Room selected", "Hologram action", "#{room.prefix}#{room.name}")
+    )
   end
 
   defp select_first_room(component, []), do: component
 
   defp select_first_room(component, [room | _rooms]) do
     select_room(component, room.id)
+  end
+
+  defp put_active_developer_context(component, event) do
+    room = component.state.active_room
+    thread_count = component.state.threads_by_room |> Map.get(room.id, %{}) |> map_size()
+
+    contract =
+      Map.get(
+        component.state.developer_contract_by_room,
+        room.id,
+        fallback_developer_contract(room)
+      )
+
+    component
+    |> put_state(
+      :developer_room_metrics,
+      developer_room_metrics(room, component.state.message_count, thread_count)
+    )
+    |> put_state(:developer_contract, contract)
+    |> put_state(:last_event, event)
+  end
+
+  defp developer_room_metrics(room, message_count, thread_count) do
+    [
+      %{label: "Room", value: "#{room.prefix}#{room.name}"},
+      %{label: "Type", value: room.kind},
+      %{label: "Messages", value: Integer.to_string(message_count)},
+      %{label: "Threads", value: Integer.to_string(thread_count)},
+      %{label: "Durability", value: "SQLite"}
+    ]
+  end
+
+  defp fallback_developer_contract(room) do
+    target_kind = if room.kind == "dm", do: "dm", else: "room"
+
+    [
+      %{
+        label: "Target",
+        value: "#{target_kind} #{room.id}",
+        detail: "Jido.Chat.MessagingTarget"
+      },
+      %{label: "Payload", value: "text", detail: "Jido.Chat.PostPayload"},
+      %{
+        label: "Write path",
+        value: "save_message",
+        detail: "Jido.Campfire.Messaging to jido_messaging"
+      }
+    ]
+  end
+
+  defp developer_event(title, layer, detail) do
+    %{
+      title: title,
+      layer: layer,
+      detail: detail
+    }
+  end
+
+  defp room_label(component, room_id) do
+    case Enum.find(component.state.rooms, &(&1.id == room_id)) do
+      nil -> room_id
+      room -> "#{room.prefix}#{room.name}"
+    end
   end
 
   defp rail_target_for_room(%{kind: "dm"}), do: "direct_messages"

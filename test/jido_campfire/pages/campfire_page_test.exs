@@ -12,6 +12,9 @@ defmodule Jido.Campfire.Pages.CampfireTest do
     assert component.state.workspace == %{id: "jido", name: "Jido Campfire"}
     assert component.state.active_room_id == "room:general"
     assert component.state.rail_target == "channels"
+    assert Enum.any?(component.state.developer_stack, &(&1.name == "Jido Chat"))
+    assert Enum.any?(component.state.developer_contract, &(&1.detail == "Jido.Chat.PostPayload"))
+    assert component.state.last_event.title == "Workspace loaded"
     assert Enum.any?(component.state.channels, &(&1.id == "room:general"))
     assert Enum.any?(component.state.direct_messages, &(&1.id == "dm:maggie"))
     assert {{:workspace, Chat.workspace_id()}, "page"} in server.subscriptions
@@ -77,6 +80,7 @@ defmodule Jido.Campfire.Pages.CampfireTest do
 
     assert Enum.any?(component.state.messages_by_room["room:runtime"], &(&1.id == message.id))
     assert Enum.find(component.state.rooms, &(&1.id == "room:runtime")).unread == 1
+    assert component.state.last_event.title == "Message stored"
     refute Enum.any?(component.state.messages, &(&1.id == message.id))
   end
 
@@ -92,6 +96,28 @@ defmodule Jido.Campfire.Pages.CampfireTest do
     assert component.state.active_room_id == "room:runtime"
     assert Enum.find(component.state.rooms, &(&1.id == "room:runtime")).unread == 0
     assert Enum.any?(component.state.messages, &(&1.id == message.id))
+
+    assert Enum.any?(
+             component.state.developer_room_metrics,
+             &(&1 == %{label: "Room", value: "#runtime"})
+           )
+
+    assert component.state.last_event.title == "Room selected"
+  end
+
+  test "open_thread action exposes a mobile thread dialog" do
+    {component, _server} = init_page(Campfire)
+    root = List.first(component.state.messages)
+
+    component = Campfire.action(:open_thread, %{message_id: root.id}, component)
+
+    assert component.state.thread_open
+    assert component.state.thread_root.id == root.id
+    assert component.state.last_event.title == "Thread opened"
+
+    dom = Campfire.template().(component.state)
+    assert dom_has_attr?(dom, "role", "dialog")
+    assert dom_has_class_fragment?(dom, "xl:hidden")
   end
 
   test "rail buttons switch to channel and direct-message groups" do
@@ -171,6 +197,8 @@ defmodule Jido.Campfire.Pages.CampfireTest do
 
     assert Enum.any?(component.state.channels, &(&1.id == room.id))
     assert component.state.messages_by_room[room.id] == [message]
+    assert Map.has_key?(component.state.developer_contract_by_room, room.id)
+    assert component.state.last_event.title == "Room created"
     refute component.state.room_form_open
     assert component.state.new_room_name == ""
     assert component.state.new_room_topic == ""
@@ -198,4 +226,56 @@ defmodule Jido.Campfire.Pages.CampfireTest do
       reactions: []
     }
   end
+
+  defp dom_has_attr?(nodes, name, value) when is_list(nodes) do
+    Enum.any?(nodes, &dom_has_attr?(&1, name, value))
+  end
+
+  defp dom_has_attr?({:element, _tag, attrs, children}, name, value) do
+    Enum.any?(attrs, fn
+      {^name, attr_value} -> attr_value_equals?(attr_value, value)
+      _other -> false
+    end) || dom_has_attr?(children, name, value)
+  end
+
+  defp dom_has_attr?(_node, _name, _value), do: false
+
+  defp dom_has_class_fragment?(nodes, fragment) when is_list(nodes) do
+    Enum.any?(nodes, &dom_has_class_fragment?(&1, fragment))
+  end
+
+  defp dom_has_class_fragment?({:element, _tag, attrs, children}, fragment) do
+    class_match? =
+      Enum.any?(attrs, fn
+        {"class", class} -> attr_value_contains?(class, fragment)
+        _other -> false
+      end)
+
+    class_match? || dom_has_class_fragment?(children, fragment)
+  end
+
+  defp dom_has_class_fragment?(_node, _fragment), do: false
+
+  defp attr_value_equals?(value, expected) when is_list(value) do
+    Enum.any?(value, fn
+      {:text, text} -> text == expected
+      _other -> false
+    end)
+  end
+
+  defp attr_value_equals?(value, expected), do: value == expected
+
+  defp attr_value_contains?(value, fragment) when is_list(value) do
+    Enum.any?(value, fn
+      {:text, text} -> String.contains?(text, fragment)
+      {:expression, text} when is_binary(text) -> String.contains?(text, fragment)
+      _other -> false
+    end)
+  end
+
+  defp attr_value_contains?(value, fragment) when is_binary(value) do
+    String.contains?(value, fragment)
+  end
+
+  defp attr_value_contains?(_value, _fragment), do: false
 end

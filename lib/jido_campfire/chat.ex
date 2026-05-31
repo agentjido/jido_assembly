@@ -8,7 +8,7 @@ defmodule Jido.Campfire.Chat do
   `Jido.Campfire.Messaging`; this module only shapes those records for the UI.
   """
 
-  alias Jido.Campfire.Messaging
+  alias Jido.Campfire.{DeveloperShowcase, Messaging}
 
   @workspace_id "jido"
   @workspace_name "Jido Campfire"
@@ -189,7 +189,14 @@ defmodule Jido.Campfire.Chat do
       active_room_prefix: active_room.prefix,
       active_topic: active_room.topic,
       messages: messages,
-      member_count_label: active_room.member_count_label
+      member_count_label: active_room.member_count_label,
+      developer_showcase:
+        DeveloperShowcase.snapshot(
+          active_room,
+          messages,
+          Map.get(threads_by_room, active_room.id, %{}),
+          rooms
+        )
     }
   end
 

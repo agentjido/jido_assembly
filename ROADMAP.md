@@ -13,14 +13,17 @@ Implemented now:
 - Realtime Hologram broadcasts for message sends, replies, reactions, and channel
   creation
 - Responsive chat shell with desktop sidebar and mobile room switcher
-- Composer, demo user switcher, room switching, unread counters, room context
-  panel, and thread panel
+- Composer, demo user switcher, room switching, unread counters, desktop thread
+  panel, and mobile thread drawer
+- Developer inspector that makes the Hologram, `jido_messaging`, SQLite,
+  `jido_chat`, and Jido responsibilities visible in the UI
 - Mentions, reactions, lightweight thread replies, and message search
 - Canonical rooms, participants, messages, reactions, and threads stored through
   `jido_messaging`
-- SQLite durability through `Jido.Campfire.Persistence.SQLite`
+- SQLite durability through `Jido.Campfire.Persistence.SQLite`, including
+  defensive write/delete ordering around the ETS mirror
 - Hologram action/command tests for core page behavior
-- SQLite restart durability test
+- SQLite restart durability and failed write/delete tests
 
 Important gaps:
 
@@ -79,7 +82,7 @@ and reliable for 5-10 local users.
   Playwright for browser/realtime/mobile.
 - Decide how feature tests should start Hologram with the Campfire patch/prune
   path.
-- Add explicit view model modules so the Hologram page stops owning all shaping.
+- Continue extracting view modules so the Hologram page stops owning all shaping.
 
 Exit criteria:
 
