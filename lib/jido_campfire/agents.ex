@@ -157,7 +157,7 @@ defmodule Jido.Campfire.Agents do
           llm_opts: [
             temperature: 0.45,
             max_tokens: 220,
-            timeout: timeout
+            receive_timeout: timeout
           ]
         )
       after
