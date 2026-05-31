@@ -59,7 +59,9 @@ cp .env.example .env
 mix holo
 ```
 
-Open `#agent-lab`, keep `Safety cap` enabled, and click `Run round`.
+Open `#agent-lab`, keep `Safety cap` enabled, type a question in the AI agent
+prompt, and click `Ask`. Each human prompt can be continued for two agent
+rounds; ask a new question to restart the discussion.
 
 ## Dependency Note
 

@@ -108,6 +108,49 @@ defmodule Jido.Campfire.Pages.Campfire.Commands do
     end
   end
 
+  def command(:prompt_agent_round, params, server) do
+    case Chat.send_message_command(
+           params.room_id,
+           params.body,
+           Map.get(params, :sender_id, Chat.current_user_id()),
+           metadata: %{agent_prompt: true}
+         ) do
+      {:ok, prompt_message, prompt_signals} ->
+        server =
+          put_workspace_action(server, :message_saved, %{
+            room_id: prompt_message.room_id,
+            message: prompt_message,
+            signal: SignalPresenter.summary(prompt_signals, "jido.messaging.room.message_added")
+          })
+
+        case Agents.run_round(params.room_id,
+               safety_enabled: Map.get(params, :safety_enabled, true),
+               inter_agent_enabled: Map.get(params, :inter_agent_enabled, true),
+               prompt_message_id: prompt_message.id
+             ) do
+          {:ok, result} ->
+            put_workspace_action(server, :agent_round_finished, %{
+              room_id: result.room_id,
+              prompt_message_id: result.prompt_message_id,
+              round_index: result.round_index,
+              round_limit: result.round_limit,
+              messages: result.messages,
+              agent_demo: Agents.snapshot(),
+              signal: SignalPresenter.summary(result.signals, "jido.messaging.room.message_added")
+            })
+
+          {:error, reason} ->
+            put_action(server, :agent_round_failed,
+              error: Agents.error_to_string(reason),
+              agent_demo: Agents.snapshot()
+            )
+        end
+
+      {:error, reason} ->
+        put_action(server, :send_failed, error: Chat.error_to_string(reason))
+    end
+  end
+
   def command(:run_search, params, server) do
     put_action(server, :search_loaded, results: Chat.search(params.query, params.user_id))
   end

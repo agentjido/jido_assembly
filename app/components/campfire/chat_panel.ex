@@ -8,6 +8,7 @@ defmodule Jido.Campfire.Components.Campfire.ChatPanel do
   prop :agent_demo, :map
   prop :agent_error, :any
   prop :agent_inter_agent_enabled, :boolean
+  prop :agent_prompt_draft, :string
   prop :agent_round_pending, :boolean
   prop :agent_safety_enabled, :boolean
   prop :current_user, :map
@@ -65,6 +66,9 @@ defmodule Jido.Campfire.Components.Campfire.ChatPanel do
                 {agent.name}
               </span>
             {/for}
+            <span class="inline-flex h-7 items-center rounded-full border border-[var(--campfire-line)] bg-white px-2 text-xs font-semibold text-[var(--campfire-muted)]">
+              {@agent_demo.safety.max_rounds_per_prompt} rounds/question
+            </span>
           </div>
 
           <div class="flex flex-wrap items-center gap-2">
@@ -92,13 +96,35 @@ defmodule Jido.Campfire.Components.Campfire.ChatPanel do
               class="inline-flex h-8 items-center gap-2 rounded-md bg-stone-900 px-3 text-xs font-bold text-white transition hover:bg-stone-700 disabled:opacity-50"
               type="button"
               disabled={@agent_round_pending || @agent_demo.missing_api_key}
-              title="Run agent round"
+              title="Continue latest human prompt"
               $click="run_agent_round"
             >
               <span class="hero-bolt size-4"></span>
-              {%if @agent_round_pending}Running{%else}Run round{/if}
+              {%if @agent_round_pending}Running{%else}Continue{/if}
             </button>
           </div>
+
+          <form class="flex min-w-0 gap-2 lg:col-span-2" $submit="prompt_agent_round">
+            <input
+              class="h-9 min-w-0 flex-1 rounded-md border border-[var(--campfire-line)] bg-white px-3 text-sm text-[var(--campfire-ink)] outline-none placeholder:text-stone-400 focus:border-[var(--campfire-accent)] focus:ring-2 focus:ring-[var(--campfire-accent)]/20"
+              aria-label="Ask AI agents"
+              autocomplete="off"
+              name="agent_prompt"
+              placeholder="Ask Alice, Bob, and Charlie"
+              type="text"
+              value={@agent_prompt_draft}
+              $input="agent_prompt_changed"
+            />
+            <button
+              class="inline-flex h-9 items-center gap-2 rounded-md bg-[var(--campfire-accent)] px-3 text-xs font-bold text-stone-950 transition hover:bg-[var(--campfire-accent-strong)] hover:text-stone-100 disabled:opacity-50"
+              type="submit"
+              disabled={@agent_round_pending || @agent_demo.missing_api_key}
+              title="Ask agents"
+            >
+              <span class="hero-paper-airplane size-4"></span>
+              Ask
+            </button>
+          </form>
         </div>
 
         {%if @agent_error}

@@ -148,6 +148,10 @@ defmodule Jido.Campfire.Pages.Campfire do
     put_state(component, :agent_inter_agent_enabled, event_checked(params))
   end
 
+  def action(:agent_prompt_changed, params, component) do
+    put_state(component, :agent_prompt_draft, event_value(params))
+  end
+
   def action(:run_agent_round, _params, component) do
     cond do
       !component.state.agent_safety_enabled ->
@@ -159,6 +163,34 @@ defmodule Jido.Campfire.Pages.Campfire do
         |> put_state(:agent_error, nil)
         |> put_command(:run_agent_round,
           room_id: component.state.active_room_id,
+          safety_enabled: component.state.agent_safety_enabled,
+          inter_agent_enabled: component.state.agent_inter_agent_enabled
+        )
+    end
+  end
+
+  def action(:prompt_agent_round, params, component) do
+    prompt =
+      params
+      |> submitted_form_value(:agent_prompt, component.state.agent_prompt_draft)
+      |> String.trim()
+
+    cond do
+      prompt == "" ->
+        put_state(component, :agent_error, "Ask a question first.")
+
+      !component.state.agent_safety_enabled ->
+        put_state(component, :agent_error, Agents.error_to_string(:safety_required))
+
+      true ->
+        component
+        |> put_state(:agent_prompt_draft, "")
+        |> put_state(:agent_round_pending, true)
+        |> put_state(:agent_error, nil)
+        |> put_command(:prompt_agent_round,
+          room_id: component.state.active_room_id,
+          body: prompt,
+          sender_id: component.state.current_user.id,
           safety_enabled: component.state.agent_safety_enabled,
           inter_agent_enabled: component.state.agent_inter_agent_enabled
         )
@@ -481,6 +513,7 @@ defmodule Jido.Campfire.Pages.Campfire do
           agent_demo={@agent_demo}
           agent_error={@agent_error}
           agent_inter_agent_enabled={@agent_inter_agent_enabled}
+          agent_prompt_draft={@agent_prompt_draft}
           agent_round_pending={@agent_round_pending}
           agent_safety_enabled={@agent_safety_enabled}
           current_user={@current_user}

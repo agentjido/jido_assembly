@@ -29,6 +29,7 @@ defmodule Jido.Campfire.Pages.Campfire.State do
       reply_draft: "",
       reply_pending: false,
       reply_error: nil,
+      agent_prompt_draft: "",
       agent_round_pending: false,
       agent_error: nil,
       agent_safety_enabled: true,

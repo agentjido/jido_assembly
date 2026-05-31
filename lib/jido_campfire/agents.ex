@@ -13,8 +13,9 @@ defmodule Jido.Campfire.Agents do
 
   @model :campfire_haiku
   @max_agents_per_round 3
-  @max_reply_chars 700
-  @recent_message_count 18
+  @max_rounds_per_prompt 2
+  @max_reply_chars 420
+  @recent_message_count 10
   @default_timeout_ms 30_000
 
   @agent_modules %{
@@ -38,6 +39,7 @@ defmodule Jido.Campfire.Agents do
       model: model_label(),
       safety: %{
         max_agents_per_round: @max_agents_per_round,
+        max_rounds_per_prompt: @max_rounds_per_prompt,
         max_reply_chars: @max_reply_chars,
         recent_message_count: @recent_message_count
       },
@@ -63,49 +65,83 @@ defmodule Jido.Campfire.Agents do
 
       true ->
         with {:ok, room} <- Messaging.get_room(room_id) do
-          transcript = transcript_for(room.id)
+          round_limit =
+            opts
+            |> Keyword.get(:round_limit, @max_rounds_per_prompt)
+            |> clamp(1, @max_rounds_per_prompt)
 
-          inter_agent_enabled = Keyword.get(opts, :inter_agent_enabled, true)
+          prompt_message_id =
+            Keyword.get(opts, :prompt_message_id) || latest_human_prompt_id(room.id)
 
-          agents
-          |> Enum.reduce_while({:ok, [], [], transcript}, fn agent,
-                                                             {:ok, messages, signals, transcript} ->
-            case agent_turn(agent, room, transcript, round_id, opts) do
-              {:ok, message, turn_signals, next_line} ->
-                next_transcript =
-                  if inter_agent_enabled do
-                    transcript ++ [next_line]
-                  else
-                    transcript
-                  end
+          completed_rounds = prompt_message_id && rounds_for_prompt(room.id, prompt_message_id)
 
-                {:cont, {:ok, messages ++ [message], signals ++ turn_signals, next_transcript}}
+          cond do
+            is_nil(prompt_message_id) ->
+              {:error, :missing_prompt}
 
-              {:error, reason} ->
-                {:halt, {:error, reason}}
-            end
-          end)
-          |> case do
-            {:ok, messages, signals, _transcript} ->
-              {:ok,
-               %{
-                 room_id: room.id,
-                 round_id: round_id,
-                 agents: Enum.map(agents, &agent_view/1),
-                 messages: messages,
-                 signals: signals
-               }}
+            completed_rounds >= round_limit ->
+              {:error, {:round_limit_reached, round_limit}}
 
-            {:error, reason} ->
-              {:error, reason}
+            true ->
+              transcript = transcript_for(room.id, prompt_message_id)
+              inter_agent_enabled = Keyword.get(opts, :inter_agent_enabled, true)
+
+              opts =
+                opts
+                |> Keyword.put(:prompt_message_id, prompt_message_id)
+                |> Keyword.put(:round_index, completed_rounds + 1)
+                |> Keyword.put(:round_limit, round_limit)
+
+              agents
+              |> Enum.reduce_while({:ok, [], [], transcript}, fn agent,
+                                                                 {:ok, messages, signals,
+                                                                  transcript} ->
+                case agent_turn(agent, room, transcript, round_id, opts) do
+                  {:ok, message, turn_signals, next_line} ->
+                    next_transcript =
+                      if inter_agent_enabled do
+                        transcript ++ [next_line]
+                      else
+                        transcript
+                      end
+
+                    {:cont,
+                     {:ok, messages ++ [message], signals ++ turn_signals, next_transcript}}
+
+                  {:error, reason} ->
+                    {:halt, {:error, reason}}
+                end
+              end)
+              |> case do
+                {:ok, messages, signals, _transcript} ->
+                  {:ok,
+                   %{
+                     room_id: room.id,
+                     prompt_message_id: prompt_message_id,
+                     round_id: round_id,
+                     round_index: completed_rounds + 1,
+                     round_limit: round_limit,
+                     agents: Enum.map(agents, &agent_view/1),
+                     messages: messages,
+                     signals: signals
+                   }}
+
+                {:error, reason} ->
+                  {:error, reason}
+              end
           end
         end
     end
   end
 
   def error_to_string(:missing_api_key), do: "Add ANTHROPIC_API_KEY before running AI agents."
+  def error_to_string(:missing_prompt), do: "Ask a question before running the agents."
   def error_to_string(:safety_required), do: "Turn the safety cap back on before running agents."
   def error_to_string(:empty_agent_reply), do: "The agent returned an empty reply."
+
+  def error_to_string({:round_limit_reached, _limit}),
+    do: "Round limit reached for this question. Ask a new question to restart."
+
   def error_to_string({:agent_failed, name, reason}), do: "#{name} failed: #{inspect(reason)}"
   def error_to_string(reason), do: "Agent round failed: #{inspect(reason)}"
 
@@ -122,6 +158,9 @@ defmodule Jido.Campfire.Agents do
                agent_id: agent.id,
                agent_name: agent.name,
                agent_round_id: round_id,
+               agent_round_index: Keyword.fetch!(opts, :round_index),
+               agent_round_limit: Keyword.fetch!(opts, :round_limit),
+               agent_prompt_message_id: Keyword.fetch!(opts, :prompt_message_id),
                model: model_label()
              }
            ) do
@@ -155,8 +194,8 @@ defmodule Jido.Campfire.Agents do
           timeout: timeout,
           max_iterations: 2,
           llm_opts: [
-            temperature: 0.45,
-            max_tokens: 220,
+            temperature: 0.35,
+            max_tokens: 140,
             receive_timeout: timeout
           ]
         )
@@ -168,6 +207,8 @@ defmodule Jido.Campfire.Agents do
 
   defp prompt_for(agent, room, transcript, opts) do
     inter_agent_enabled = Keyword.get(opts, :inter_agent_enabled, true)
+    round_index = Keyword.fetch!(opts, :round_index)
+    round_limit = Keyword.fetch!(opts, :round_limit)
 
     visible_transcript =
       if inter_agent_enabled do
@@ -184,27 +225,30 @@ defmodule Jido.Campfire.Agents do
 
     peer_instruction =
       if inter_agent_enabled do
-        "The other AI agents may reply after you, so respond to the latest point and hand off cleanly."
+        "React to prior agent turns when useful."
       else
-        "Respond to the human conversation only. Do not invite another agent to continue."
+        "Ignore agent turns. Answer the human prompt only."
       end
 
     """
-    Campfire room: #{room.name}
-    Agent: #{agent.name} (#{agent.title})
-
-    Recent transcript, oldest to newest:
+    Room: #{room.name}
+    Agent: #{agent.name} / #{agent.title}
+    Round: #{round_index}/#{round_limit}
+    Transcript:
     #{transcript_text}
 
-    Write #{agent.name}'s next message.
     #{peer_instruction}
-    One message only. No markdown table. No preamble. Stay under 90 words.
+    Reply as #{agent.name}. Max 2 short sentences. No preamble.
     """
   end
 
-  defp transcript_for(room_id) do
-    room_id
-    |> Chat.list_message_views()
+  defp transcript_for(room_id, prompt_message_id) do
+    views =
+      room_id
+      |> Chat.list_message_views()
+      |> messages_from(prompt_message_id)
+
+    views
     |> Enum.take(-@recent_message_count)
     |> Enum.map(fn message ->
       %{
@@ -214,6 +258,47 @@ defmodule Jido.Campfire.Agents do
         agent: String.starts_with?(message.sender_id, "agent:")
       }
     end)
+  end
+
+  defp messages_from(messages, nil), do: messages
+
+  defp messages_from(messages, prompt_message_id) do
+    messages
+    |> Enum.drop_while(&(&1.id != prompt_message_id))
+    |> case do
+      [] -> messages
+      prompted_messages -> prompted_messages
+    end
+  end
+
+  defp latest_human_prompt_id(room_id) do
+    room_id
+    |> timeline_messages()
+    |> Enum.reverse()
+    |> Enum.find_value(fn message ->
+      if human_user_message?(message), do: message.id
+    end)
+  end
+
+  defp rounds_for_prompt(room_id, prompt_message_id) do
+    room_id
+    |> timeline_messages()
+    |> Enum.filter(&(metadata_value(&1.metadata, :agent_prompt_message_id) == prompt_message_id))
+    |> Enum.map(&metadata_value(&1.metadata, :agent_round_id))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> Enum.count()
+  end
+
+  defp timeline_messages(room_id) do
+    case Messaging.room_timeline(room_id, limit: 500) do
+      {:ok, %{messages: messages}} -> messages
+      {:error, _reason} -> []
+    end
+  end
+
+  defp human_user_message?(message) do
+    message.role == :user and not String.starts_with?(message.sender_id, "agent:")
   end
 
   defp normalize_reply({:ok, reply}, agent_name), do: normalize_reply(reply, agent_name)
@@ -293,6 +378,14 @@ defmodule Jido.Campfire.Agents do
 
   defp present?(value) when is_binary(value), do: String.trim(value) != ""
   defp present?(_value), do: false
+
+  defp metadata_value(nil, _key), do: nil
+
+  defp metadata_value(metadata, key) when is_map(metadata) do
+    Map.get(metadata, key, Map.get(metadata, Atom.to_string(key)))
+  end
+
+  defp metadata_value(_metadata, _key), do: nil
 
   defp responder?(opts), do: Keyword.has_key?(opts, :responder)
 

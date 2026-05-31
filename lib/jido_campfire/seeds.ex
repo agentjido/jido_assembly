@@ -173,7 +173,7 @@ defmodule Jido.Campfire.Seeds do
     ],
     "room:agent-lab" => [
       {"system:campfire",
-       "Alice, Bob, and Charlie are Jido AI participants. Add ANTHROPIC_API_KEY, keep the safety cap on, and run a bounded agent round."},
+       "Alice, Bob, and Charlie are Jido AI participants. Add ANTHROPIC_API_KEY, keep the safety cap on, and ask them a question."},
       {"user:you",
        "Let's use this room to see how AI agents can participate in a normal Campfire channel."}
     ],

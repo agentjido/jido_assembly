@@ -24,6 +24,7 @@ defmodule Jido.Campfire.AgentsTest do
     assert Enum.map(snapshot.agents, & &1.name) == ["Alice", "Bob", "Charlie"]
     assert snapshot.model == "anthropic:claude-haiku-4-5"
     assert snapshot.safety.max_agents_per_round == 3
+    assert snapshot.safety.max_rounds_per_prompt == 2
     assert snapshot.missing_api_key
   end
 
@@ -40,38 +41,46 @@ defmodule Jido.Campfire.AgentsTest do
   end
 
   test "run_round writes bounded agent replies through the Campfire chat context" do
+    {room, prompt} = prompted_room!("How should these agents answer?")
+
     responder = fn agent, _room, transcript ->
       {:ok,
        "#{agent.name} sees #{Enum.count(transcript)} prior messages and adds one bounded reply."}
     end
 
     assert {:ok, result} =
-             Agents.run_round("room:agent-lab",
+             Agents.run_round(room.id,
                responder: responder,
+               prompt_message_id: prompt.id,
                safety_enabled: true,
                inter_agent_enabled: true
              )
 
     assert Enum.map(result.messages, & &1.author) == ["Alice", "Bob", "Charlie"]
+    assert result.prompt_message_id == prompt.id
+    assert result.round_index == 1
+    assert result.round_limit == 2
     assert Enum.count(result.signals) == 3
 
     for message <- result.messages do
-      assert message.room_id == "room:agent-lab"
+      assert message.room_id == room.id
       assert message.sender_id in ["agent:alice", "agent:bob", "agent:charlie"]
 
       assert {:ok, persisted} = Messaging.get_message(message.id)
       assert persisted.role == :assistant
       assert persisted.metadata.source == "jido_ai"
       assert is_binary(persisted.metadata.agent_round_id)
+      assert persisted.metadata.agent_prompt_message_id == prompt.id
     end
 
     assert Enum.any?(
-             Chat.list_message_views("room:agent-lab"),
+             Chat.list_message_views(room.id),
              &(&1.id == List.last(result.messages).id)
            )
   end
 
   test "run_round can keep agent turns out of later agent context" do
+    {room, prompt} = prompted_room!("Answer without chaining agents.")
     parent = self()
 
     responder = fn agent, _room, transcript ->
@@ -80,8 +89,9 @@ defmodule Jido.Campfire.AgentsTest do
     end
 
     assert {:ok, result} =
-             Agents.run_round("room:agent-lab",
+             Agents.run_round(room.id,
                responder: responder,
+               prompt_message_id: prompt.id,
                safety_enabled: true,
                inter_agent_enabled: false
              )
@@ -91,6 +101,78 @@ defmodule Jido.Campfire.AgentsTest do
     assert_receive {:agent_transcript, "Alice", count}
     assert_receive {:agent_transcript, "Bob", ^count}
     assert_receive {:agent_transcript, "Charlie", ^count}
+  end
+
+  test "run_round defaults to the latest human prompt" do
+    {room, _first_prompt} = prompted_room!("First prompt should not anchor the round.")
+
+    assert {:ok, second_prompt, _signals} =
+             Chat.send_message_command(
+               room.id,
+               "Second prompt should anchor the round.",
+               Chat.current_user_id()
+             )
+
+    parent = self()
+
+    responder = fn agent, _room, transcript ->
+      if agent.name == "Alice" do
+        send(parent, {:alice_transcript, Enum.map(transcript, & &1.body)})
+      end
+
+      {:ok, "#{agent.name} answers the latest prompt."}
+    end
+
+    assert {:ok, result} =
+             Agents.run_round(room.id,
+               responder: responder,
+               safety_enabled: true,
+               inter_agent_enabled: true
+             )
+
+    assert result.prompt_message_id == second_prompt.id
+    assert_receive {:alice_transcript, bodies}
+    assert Enum.any?(bodies, &String.contains?(&1, "Second prompt"))
+    refute Enum.any?(bodies, &String.contains?(&1, "First prompt"))
+  end
+
+  test "run_round enforces a round limit per human prompt" do
+    {room, prompt} = prompted_room!("Only one continuation is allowed.")
+
+    responder = fn agent, _room, _transcript ->
+      {:ok, "#{agent.name} answers once."}
+    end
+
+    assert {:ok, result} =
+             Agents.run_round(room.id,
+               responder: responder,
+               prompt_message_id: prompt.id,
+               round_limit: 1,
+               safety_enabled: true
+             )
+
+    assert result.round_index == 1
+    assert result.round_limit == 1
+
+    assert {:error, {:round_limit_reached, 1}} =
+             Agents.run_round(room.id,
+               responder: responder,
+               prompt_message_id: prompt.id,
+               round_limit: 1,
+               safety_enabled: true
+             )
+  end
+
+  defp prompted_room!(prompt) do
+    name = "agent-test-#{System.unique_integer([:positive])}"
+
+    assert {:ok, room, _messages, _signals} =
+             Chat.create_channel_command(%{name: name, topic: "Agent test room."})
+
+    assert {:ok, prompt_message, _signals} =
+             Chat.send_message_command(room.id, prompt, Chat.current_user_id())
+
+    {room, prompt_message}
   end
 
   defp restore_app_key(nil), do: Application.delete_env(:req_llm, :anthropic_api_key)

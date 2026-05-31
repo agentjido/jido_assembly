@@ -31,6 +31,7 @@ defmodule Jido.Campfire.Pages.CampfireTest do
     assert Enum.any?(component.state.direct_messages, &(&1.id == "dm:maggie"))
     assert Enum.any?(component.state.direct_messages, &(&1.id == "dm:alice"))
     assert Enum.map(component.state.agent_demo.agents, & &1.name) == ["Alice", "Bob", "Charlie"]
+    assert component.state.agent_prompt_draft == ""
     assert component.next_action == %Action{name: :presence_heartbeat, delay: 250}
     assert {{:workspace, Chat.workspace_id()}, "page"} in server.subscriptions
   end
@@ -177,6 +178,37 @@ defmodule Jido.Campfire.Pages.CampfireTest do
              name: :run_agent_round,
              params: %{
                room_id: "room:general",
+               safety_enabled: true,
+               inter_agent_enabled: true
+             }
+           } = component.next_command
+  end
+
+  test "prompt_agent_round action validates blank prompts" do
+    {component, _server} = init_page(Campfire)
+
+    component = Campfire.action(:prompt_agent_round, %{"agent_prompt" => "   "}, component)
+
+    assert component.state.agent_error == "Ask a question first."
+    refute component.next_command
+  end
+
+  test "prompt_agent_round action saves a prompt and queues an agent round" do
+    {component, _server} = init_page(Campfire)
+    component = put_page_state(component, :agent_prompt_draft, "  How should we ship this?  ")
+
+    component = Campfire.action(:prompt_agent_round, %{}, component)
+
+    assert component.state.agent_prompt_draft == ""
+    assert component.state.agent_round_pending
+    assert component.state.agent_error == nil
+
+    assert %Command{
+             name: :prompt_agent_round,
+             params: %{
+               room_id: "room:general",
+               body: "How should we ship this?",
+               sender_id: "user:you",
                safety_enabled: true,
                inter_agent_enabled: true
              }
