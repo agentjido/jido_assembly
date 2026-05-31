@@ -1,6 +1,7 @@
 defmodule Jido.Campfire.Pages.Campfire do
   use Hologram.Page
 
+  alias Hologram.JS
   alias Jido.Campfire.Chat
   alias Jido.Campfire.Layouts.App
 
@@ -28,7 +29,8 @@ defmodule Jido.Campfire.Pages.Campfire do
         thread_messages: [],
         reply_draft: "",
         reply_pending: false,
-        reply_error: nil
+        reply_error: nil,
+        rail_target: "channels"
       )
 
     server = put_subscription(server, {:workspace, Chat.workspace_id()})
@@ -38,6 +40,37 @@ defmodule Jido.Campfire.Pages.Campfire do
 
   def action(:select_room, params, component) do
     select_room(component, params.id)
+  end
+
+  def action(:rail_workspace, _params, component) do
+    focus_rail_target(:workspace)
+    select_room(component, "room:general")
+  end
+
+  def action(:rail_channels, _params, component) do
+    focus_rail_target(:channels)
+
+    component
+    |> put_state(:rail_target, "channels")
+    |> select_first_room(component.state.channels)
+  end
+
+  def action(:rail_direct_messages, _params, component) do
+    focus_rail_target(:direct_messages)
+
+    component
+    |> put_state(:rail_target, "direct_messages")
+    |> select_first_room(component.state.direct_messages)
+  end
+
+  def action(:rail_search, _params, component) do
+    focus_rail_target(:search)
+    put_state(component, :rail_target, "search")
+  end
+
+  def action(:rail_users, _params, component) do
+    focus_rail_target(:users)
+    put_state(component, :rail_target, "users")
   end
 
   def action(:select_user, params, component) do
@@ -343,21 +376,51 @@ defmodule Jido.Campfire.Pages.Campfire do
     <main class="h-screen min-h-[680px] bg-[var(--campfire-bg)] text-[var(--campfire-ink)]">
       <div class="grid h-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[72px_292px_minmax(0,1fr)] xl:grid-cols-[72px_292px_minmax(0,1fr)_360px]">
         <aside class="hidden flex-col items-center gap-3 border-r border-white/8 bg-[var(--campfire-rail)] px-3 py-4 text-stone-200 md:flex">
-          <div class="grid size-11 place-items-center rounded-lg bg-[var(--campfire-accent)] text-base font-black text-stone-950 shadow-sm">
+          <button
+            aria-label="Open workspace home"
+            class="grid size-11 place-items-center rounded-lg bg-[var(--campfire-accent)] text-base font-black text-stone-950 shadow-sm transition hover:bg-[var(--campfire-accent-strong)] hover:text-stone-100"
+            type="button"
+            title="Workspace home"
+            $click="rail_workspace"
+          >
             JC
-          </div>
-          <button class="grid size-10 place-items-center rounded-md bg-white/8 text-stone-200 transition hover:bg-white/12" type="button" title="Channels">
+          </button>
+          <button
+            aria-label="Open channels"
+            class="grid size-10 place-items-center rounded-md transition {if @rail_target == "channels" do "bg-white/18 text-white" else "bg-white/8 text-stone-200 hover:bg-white/12" end}"
+            type="button"
+            title="Channels"
+            $click="rail_channels"
+          >
             <span class="hero-chat-bubble-left-right size-5"></span>
           </button>
-          <button class="grid size-10 place-items-center rounded-md bg-white/8 text-stone-200 transition hover:bg-white/12" type="button" title="Direct messages">
+          <button
+            aria-label="Open direct messages"
+            class="grid size-10 place-items-center rounded-md transition {if @rail_target == "direct_messages" do "bg-white/18 text-white" else "bg-white/8 text-stone-200 hover:bg-white/12" end}"
+            type="button"
+            title="Direct messages"
+            $click="rail_direct_messages"
+          >
             <span class="hero-at-symbol size-5"></span>
           </button>
-          <button class="grid size-10 place-items-center rounded-md bg-white/8 text-stone-200 transition hover:bg-white/12" type="button" title="Search">
+          <button
+            aria-label="Focus search"
+            class="grid size-10 place-items-center rounded-md transition {if @rail_target == "search" do "bg-white/18 text-white" else "bg-white/8 text-stone-200 hover:bg-white/12" end}"
+            type="button"
+            title="Search"
+            $click="rail_search"
+          >
             <span class="hero-magnifying-glass size-5"></span>
           </button>
-          <div class="mt-auto grid size-10 place-items-center rounded-md border border-white/10 bg-white/6 text-xs font-semibold text-stone-300">
+          <button
+            aria-label="Open demo user switcher"
+            class="mt-auto grid size-10 place-items-center rounded-md border text-xs font-semibold transition {if @rail_target == "users" do "border-[var(--campfire-accent)] bg-[var(--campfire-accent)] text-stone-950" else "border-white/10 bg-white/6 text-stone-300 hover:bg-white/10" end}"
+            type="button"
+            title="Demo user"
+            $click="rail_users"
+          >
             {@current_user.initials}
-          </div>
+          </button>
         </aside>
 
         <aside class="hidden min-h-0 flex-col bg-[var(--campfire-sidebar)] text-stone-100 md:flex">
@@ -365,12 +428,12 @@ defmodule Jido.Campfire.Pages.Campfire do
             <div class="flex items-center justify-between gap-3">
               <div class="min-w-0">
                 <p class="text-xs font-semibold text-stone-400">Workspace</p>
-                <h1 class="mt-1 truncate text-lg font-bold text-stone-50">{@workspace.name}</h1>
+                <h1 class="mt-1 truncate text-lg font-bold text-stone-50" id="campfire-workspace-heading">{@workspace.name}</h1>
               </div>
               <span class="rounded-md bg-[var(--campfire-green)]/18 px-2 py-1 text-xs font-semibold text-emerald-200">live</span>
             </div>
 
-            <div class="mt-4">
+            <div class="mt-4" id="campfire-demo-users" tabindex="-1">
               <p class="mb-2 text-xs font-semibold text-stone-400">Demo user</p>
               <div class="grid grid-cols-2 gap-1.5">
                 {%for user <- @demo_users}
@@ -389,7 +452,8 @@ defmodule Jido.Campfire.Pages.Campfire do
               <div class="relative">
                 <span class="hero-magnifying-glass pointer-events-none absolute left-3 top-2.5 size-4 text-stone-500"></span>
                 <input
-                  class="h-9 w-full rounded-md border border-white/10 bg-stone-950/35 pl-9 pr-3 text-sm text-stone-100 outline-none placeholder:text-stone-500"
+                  class="h-9 w-full rounded-md border bg-stone-950/35 pl-9 pr-3 text-sm text-stone-100 outline-none placeholder:text-stone-500 {if @rail_target == "search" do "border-[var(--campfire-accent)] ring-2 ring-[var(--campfire-accent)]/30" else "border-white/10" end}"
+                  id="campfire-search-input"
                   name="search"
                   placeholder="Search messages"
                   value={@search_query}
@@ -414,7 +478,7 @@ defmodule Jido.Campfire.Pages.Campfire do
           </header>
 
           <div class="min-h-0 flex-1 overflow-y-auto px-3 py-4">
-            <section>
+            <section id="campfire-channels-section" tabindex="-1">
               <div class="mb-2 flex items-center justify-between px-2 text-xs font-semibold text-stone-400">
                 <span>Channels</span>
                 <button class="grid size-7 place-items-center rounded-md text-stone-300 transition hover:bg-white/8" type="button" title="New channel" $click="toggle_room_form">
@@ -469,7 +533,7 @@ defmodule Jido.Campfire.Pages.Campfire do
               </div>
             </section>
 
-            <section class="mt-6">
+            <section class="mt-6" id="campfire-direct-messages-section" tabindex="-1">
               <div class="mb-2 px-2 text-xs font-semibold text-stone-400">Direct messages</div>
               <div class="space-y-1">
                 {%for person <- @direct_messages}
@@ -734,6 +798,7 @@ defmodule Jido.Campfire.Pages.Campfire do
 
     component
     |> put_rooms(rooms)
+    |> put_state(:rail_target, rail_target_for_room(room))
     |> put_state(:active_room, room)
     |> put_state(:active_room_id, room.id)
     |> put_state(:active_room_name, room.name)
@@ -748,6 +813,53 @@ defmodule Jido.Campfire.Pages.Campfire do
     |> put_state(:thread_open, false)
     |> put_state(:thread_root, nil)
     |> put_state(:thread_messages, [])
+  end
+
+  defp select_first_room(component, []), do: component
+
+  defp select_first_room(component, [room | _rooms]) do
+    select_room(component, room.id)
+  end
+
+  defp rail_target_for_room(%{kind: "dm"}), do: "direct_messages"
+  defp rail_target_for_room(_room), do: "channels"
+
+  defp focus_rail_target(:workspace) do
+    JS.exec("""
+    document.getElementById("campfire-workspace-heading")?.scrollIntoView({ block: "nearest" });
+    """)
+  end
+
+  defp focus_rail_target(:channels) do
+    JS.exec("""
+    const target = document.getElementById("campfire-channels-section");
+    target?.scrollIntoView({ block: "nearest" });
+    target?.focus({ preventScroll: true });
+    """)
+  end
+
+  defp focus_rail_target(:direct_messages) do
+    JS.exec("""
+    const target = document.getElementById("campfire-direct-messages-section");
+    target?.scrollIntoView({ block: "nearest" });
+    target?.focus({ preventScroll: true });
+    """)
+  end
+
+  defp focus_rail_target(:search) do
+    JS.exec("""
+    const target = document.getElementById("campfire-search-input");
+    target?.scrollIntoView({ block: "nearest" });
+    target?.focus();
+    """)
+  end
+
+  defp focus_rail_target(:users) do
+    JS.exec("""
+    const target = document.getElementById("campfire-demo-users");
+    target?.scrollIntoView({ block: "nearest" });
+    target?.focus({ preventScroll: true });
+    """)
   end
 
   defp put_timeline_message(component, room_id, message) do

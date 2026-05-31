@@ -11,6 +11,7 @@ defmodule Jido.Campfire.Pages.CampfireTest do
 
     assert component.state.workspace == %{id: "jido", name: "Jido Campfire"}
     assert component.state.active_room_id == "room:general"
+    assert component.state.rail_target == "channels"
     assert Enum.any?(component.state.channels, &(&1.id == "room:general"))
     assert Enum.any?(component.state.direct_messages, &(&1.id == "dm:maggie"))
     assert {{:workspace, Chat.workspace_id()}, "page"} in server.subscriptions
@@ -91,6 +92,32 @@ defmodule Jido.Campfire.Pages.CampfireTest do
     assert component.state.active_room_id == "room:runtime"
     assert Enum.find(component.state.rooms, &(&1.id == "room:runtime")).unread == 0
     assert Enum.any?(component.state.messages, &(&1.id == message.id))
+  end
+
+  test "rail buttons switch to channel and direct-message groups" do
+    {component, _server} = init_page(Campfire)
+
+    component = Campfire.action(:rail_direct_messages, %{}, component)
+    assert component.state.rail_target == "direct_messages"
+    assert component.state.active_room_kind == "dm"
+    assert component.state.active_room_id == "dm:maggie"
+
+    component = Campfire.action(:rail_channels, %{}, component)
+    assert component.state.rail_target == "channels"
+    assert component.state.active_room_kind == "channel"
+    assert component.state.active_room_id == "room:general"
+  end
+
+  test "rail search and user buttons expose their active targets" do
+    {component, _server} = init_page(Campfire)
+
+    component = Campfire.action(:rail_search, %{}, component)
+    assert component.state.rail_target == "search"
+    assert component.state.active_room_id == "room:general"
+
+    component = Campfire.action(:rail_users, %{}, component)
+    assert component.state.rail_target == "users"
+    assert component.state.active_room_id == "room:general"
   end
 
   test "persist_channel command creates a group chat and broadcasts it" do
