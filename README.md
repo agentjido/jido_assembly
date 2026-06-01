@@ -1,14 +1,14 @@
-# Jido Campfire
+# Jido Assembly
 
-`jido_campfire` is a developer-level spike for a small Slack-like Jido
+`jido_assembly` is a developer-level spike for a small Slack-like Jido
 workspace. It uses Hologram as the UI layer, Phoenix as the web shell,
 `jido_messaging` for durable chat primitives, SQLite for local persistence,
 Jido Signal-style events for UI updates, Phoenix Presence for online state, and
 `jido_ai` for bounded AI participants in chat.
 
-The package module prefix is `Jido.Campfire`.
+The package module prefix is `Jido.Assembly`.
 
-![Jido Campfire Slack-like chat UI](priv/static/images/campfire-screenshot.jpg)
+![Jido Assembly Slack-like chat UI](priv/static/images/assembly-screenshot.png)
 
 ## What This Demonstrates
 
@@ -26,7 +26,7 @@ The package module prefix is `Jido.Campfire`.
   assets, and Presence integration while the chat behavior lives in the app
   context.
 - A developer inspector that shows how Hologram, `jido_messaging`, Jido Signal,
-  SQLite, `jido_chat`, and Campfire responsibilities fit together for the
+  SQLite, `jido_chat`, and Assembly responsibilities fit together for the
   active room.
 
 ## Run
@@ -48,7 +48,7 @@ If another local app is already using port 4000:
 PORT=4002 mix holo
 ```
 
-Campfire stores local demo state in `data/jido_campfire.sqlite3`. Delete that
+Assembly stores local demo state in `data/jido_assembly.sqlite3`. Delete that
 file if you want to reset the demo workspace.
 
 To try the AI agent round, add an Anthropic key before starting the server:
@@ -65,7 +65,7 @@ rounds; ask a new question to restart the discussion.
 
 ## Dependency Note
 
-Campfire temporarily depends on the `jido_messaging` `main` branch because the
+Assembly temporarily depends on the `jido_messaging` `main` branch because the
 SQLite and signal APIs from
 [agentjido/jido_messaging#24](https://github.com/agentjido/jido_messaging/pull/24)
 are merged but not yet released to Hex. After a new Hex release ships, switch
@@ -75,26 +75,26 @@ are merged but not yet released to Hex. After a new Hex release ships, switch
 
 - `app/` contains Hologram pages, components, reducers, and server command
   handlers.
-- `lib/jido_campfire/` contains the Campfire backend context, read projections,
+- `lib/jido_assembly/` contains the Assembly backend context, read projections,
   mentions, seeds, messaging integration, Presence adapter configuration,
   Jido AI agent orchestration, and developer inspector data.
-- `lib/jido_campfire_web/` stays thin: endpoint, router, Phoenix Presence,
+- `lib/jido_assembly_web/` stays thin: endpoint, router, Phoenix Presence,
   Hologram presence notifier, and signal presentation for the UI.
 - `jido_messaging` owns the reusable messaging primitives and SQLite adapter;
-  Campfire owns the Slack-like product choices and demo read models.
+  Assembly owns the Slack-like product choices and demo read models.
 
 ## Testing Story
 
-Campfire now has Hologram-focused ExUnit coverage in
-`test/jido_campfire/pages/campfire_page_test.exs`. These tests exercise the
+Assembly now has Hologram-focused ExUnit coverage in
+`test/jido_assembly/pages/assembly_page_test.exs`. These tests exercise the
 parts of Hologram that are most testable today: page `init/3`, template
 evaluation, client `action/3` state transitions, server `command/3` handling,
 and queued Hologram broadcasts.
 
-The local suite also checks the Campfire chat context, mentions, Presence
+The local suite also checks the Assembly chat context, mentions, Presence
 adapter, signal presenter, and wiring to the upstream
 `Jido.Messaging.Persistence.SQLite` adapter. Adapter-level durability tests
-belong in `jido_messaging`; Campfire should prove that the demo uses those
+belong in `jido_messaging`; Assembly should prove that the demo uses those
 primitives cleanly rather than duplicating low-level persistence coverage.
 
 Compared with Phoenix LiveView testing, this is lower-level. Hologram actions
@@ -110,7 +110,7 @@ room creation propagation, mobile layout, focus/keyboard behavior, and visual
 overflow.
 
 `Hologram.Test.setup/0` exists for browser/feature tests, but in this app it
-needs the Campfire Hologram patch/prune path because `jido_messaging` pulls in
+needs the Assembly Hologram patch/prune path because `jido_messaging` pulls in
 server-only transitive BEAM modules that Hologram `0.9.1` tries to reflect over.
 That makes the current feature-test story workable, but not as mature as
 Phoenix LiveView's built-in test ergonomics.

@@ -22,7 +22,7 @@ import "phoenix_html"
 // Establish Phoenix Socket and LiveView configuration.
 // import {Socket} from "phoenix"
 // import {LiveSocket} from "phoenix_live_view"
-// import {hooks as colocatedHooks} from "phoenix-colocated/jido_campfire"
+// import {hooks as colocatedHooks} from "phoenix-colocated/jido_assembly"
 // import topbar from "../vendor/topbar"
 
 // const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
@@ -82,7 +82,7 @@ import "phoenix_html"
 // }
 
 
-const composerFieldSelector = "[data-campfire-composer] input[type='text'], [data-campfire-composer] textarea"
+const composerFieldSelector = "[data-assembly-composer] input[type='text'], [data-assembly-composer] textarea"
 
 document.addEventListener("keydown", (event) => {
   const field = event.target.closest?.(composerFieldSelector)

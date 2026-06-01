@@ -1,16 +1,16 @@
-defmodule Jido.Campfire.MixProject do
+defmodule Jido.Assembly.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :jido_campfire,
+      app: :jido_assembly,
       version: "0.1.0",
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
-      compilers: [:phoenix_live_view] ++ Mix.compilers() ++ [:campfire_hologram_prune, :hologram],
+      compilers: [:phoenix_live_view] ++ Mix.compilers() ++ [:assembly_hologram_prune, :hologram],
       listeners: [Phoenix.CodeReloader]
     ]
   end
@@ -20,7 +20,7 @@ defmodule Jido.Campfire.MixProject do
   # Type `mix help compile.app` for more information.
   def application do
     [
-      mod: {Jido.Campfire.Application, []},
+      mod: {Jido.Assembly.Application, []},
       extra_applications: [:logger, :runtime_tools]
     ]
   end
@@ -32,7 +32,7 @@ defmodule Jido.Campfire.MixProject do
   end
 
   # Documented Hologram option: app/ contains compiled page/component modules,
-  # while lib/ contains the Phoenix backend and Campfire context modules.
+  # while lib/ contains the Phoenix backend and Assembly context modules.
   defp elixirc_paths(:test), do: ["app", "lib", "test/support"]
   defp elixirc_paths(_), do: ["app", "lib"]
 
@@ -84,10 +84,10 @@ defmodule Jido.Campfire.MixProject do
       ],
       "patch.hologram": ["cmd elixir scripts/patch_hologram_reflection.exs"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
-      "assets.build": ["compile", "tailwind jido_campfire", "esbuild jido_campfire"],
+      "assets.build": ["compile", "tailwind jido_assembly", "esbuild jido_assembly"],
       "assets.deploy": [
-        "tailwind jido_campfire --minify",
-        "esbuild jido_campfire --minify",
+        "tailwind jido_assembly --minify",
+        "esbuild jido_assembly --minify",
         "phx.digest"
       ],
       precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]

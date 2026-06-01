@@ -1,7 +1,7 @@
 # Hologram UI Source
 
 This directory contains Hologram components, layouts, and pages that are
-compiled into the Campfire client/server UI layer. The Phoenix backend, chat
+compiled into the Assembly client/server UI layer. The Phoenix backend, chat
 context, SQLite persistence wrapper, and OTP application stay in `lib/`.
 
 Hologram documents `app/` as an optional organization style, not a framework

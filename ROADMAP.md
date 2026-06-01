@@ -1,14 +1,14 @@
-# Jido Campfire Roadmap
+# Jido Assembly Roadmap
 
-Campfire is currently a Slack-like developer demo, not a Slack replacement. The
-useful product question is where Campfire should copy the category, and where it
+Assembly is currently a Slack-like developer demo, not a Slack replacement. The
+useful product question is where Assembly should copy the category, and where it
 should diverge once Jido-native agents and bridges are added.
 
 ## Current Feature Inventory
 
 Implemented now:
 
-- One seeded workspace: `Jido Campfire`
+- One seeded workspace: `Jido Assembly`
 - Multiple channels and direct messages
 - Realtime Hologram broadcasts for message sends, replies, reactions, and channel
   creation
@@ -22,7 +22,7 @@ Implemented now:
   `jido_messaging`
 - SQLite durability through upstream `Jido.Messaging.Persistence.SQLite`
 - Hologram action/command tests for core page behavior
-- Campfire guard test confirming it uses upstream SQLite persistence
+- Assembly guard test confirming it uses upstream SQLite persistence
 
 Important gaps:
 
@@ -39,25 +39,25 @@ Important gaps:
 
 Slack sets the collaboration baseline: fast channels and DMs, threads,
 mentions, search, files, reactions, huddles, workflows, apps, Canvas, Lists,
-enterprise controls, and AI features. Campfire should not try to match all of
+enterprise controls, and AI features. Assembly should not try to match all of
 that first. It should match the minimum chat primitives users expect, then win
 on Jido-native agent and bridge workflows.
 
 Mattermost is the self-hosted and controlled-deployment reference. It matters if
-Campfire needs private infrastructure, compliance, incident workflows, or
+Assembly needs private infrastructure, compliance, incident workflows, or
 government/regulated buyers.
 
 Discord is the realtime community reference. It is stronger on voice, presence,
-and lightweight community flow than enterprise workflow. Campfire can learn from
+and lightweight community flow than enterprise workflow. Assembly can learn from
 its immediacy without adopting its community-first information architecture.
 
 Microsoft Teams is the bundled-suite reference. It wins through meetings,
-documents, calendar, identity, and Microsoft 365 gravity. Campfire should not
+documents, calendar, identity, and Microsoft 365 gravity. Assembly should not
 compete there directly unless Jido needs a specific enterprise integration path.
 
 ## Product Position
 
-After the developer demo, Campfire should become an agent-native team chat and
+After the developer demo, Assembly should become an agent-native team chat and
 bridge console:
 
 - Chat rooms are the human interface to Jido Messaging.
@@ -75,11 +75,11 @@ Goal: keep the current Hologram plus `jido_messaging` demo readable, durable,
 and reliable for 5-10 local users.
 
 - Keep Hologram UI state isolated from messaging persistence.
-- Keep SQLite durability in `jido_messaging`; Campfire should consume it through
+- Keep SQLite durability in `jido_messaging`; Assembly should consume it through
   its app-specific chat context.
 - Keep tests layered: Chat context ExUnit, Hologram action/command ExUnit,
   Playwright for browser/realtime/mobile.
-- Decide how feature tests should start Hologram with the Campfire patch/prune
+- Decide how feature tests should start Hologram with the Assembly patch/prune
   path.
 - Continue extracting view modules so the Hologram page stops owning all shaping.
 
@@ -127,12 +127,12 @@ Goal: cover expected team-chat workflows before going deeper on agents.
 
 Exit criteria:
 
-- Campfire feels familiar to someone fluent in Slack for daily channel, DM,
+- Assembly feels familiar to someone fluent in Slack for daily channel, DM,
   thread, and search workflows.
 
 ## Phase 3: Jido-Native Differentiation
 
-Goal: make Campfire more useful than a clone for Jido users.
+Goal: make Assembly more useful than a clone for Jido users.
 
 - Room Assistant as an actual agent subscriber, not seeded fixture text.
 - Agent participants with capabilities, status, memory scope, and room-specific
@@ -142,14 +142,14 @@ Goal: make Campfire more useful than a clone for Jido users.
   cards, and audit trail links.
 - Adapter bridge dashboard in the room context panel: connected providers,
   delivery state, inbound/outbound event IDs, retry controls.
-- Cross-provider rooms: Slack channel plus Discord channel plus native Campfire
+- Cross-provider rooms: Slack channel plus Discord channel plus native Assembly
   room mapped into one canonical `jido_messaging` room.
 - Summaries and handoffs: daily room summary, unresolved questions, decisions,
   extracted tasks, and "what changed since I left".
 
 Exit criteria:
 
-- Campfire can host a room where people, agents, and external provider messages
+- Assembly can host a room where people, agents, and external provider messages
   coordinate around a shared Jido workflow.
 
 ## Phase 4: Administration And Trust
@@ -167,7 +167,7 @@ Goal: make the product operable beyond a local spike.
 
 Exit criteria:
 
-- A team can deploy Campfire with clear operational controls and trust the event
+- A team can deploy Assembly with clear operational controls and trust the event
   history.
 
 ## Phase 5: Product Expansion

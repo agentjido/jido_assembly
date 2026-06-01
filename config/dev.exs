@@ -6,7 +6,7 @@ import Config
 # The watchers configuration can be used to run external
 # watchers to your application. For example, we can use it
 # to bundle .js and .css sources.
-config :jido_campfire, Jido.CampfireWeb.Endpoint,
+config :jido_assembly, Jido.AssemblyWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
   # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
   http: [ip: {127, 0, 0, 1}],
@@ -15,8 +15,8 @@ config :jido_campfire, Jido.CampfireWeb.Endpoint,
   debug_errors: true,
   secret_key_base: "R8eFWkJmAroqxZtLU5fclk0CNKKrJ7OT5SNtLjaEb1gUqEuUU/bu2w4uK/H4m5dt",
   watchers: [
-    esbuild: {Esbuild, :install_and_run, [:jido_campfire, ~w(--sourcemap=inline --watch)]},
-    tailwind: {Tailwind, :install_and_run, [:jido_campfire, ~w(--watch)]}
+    esbuild: {Esbuild, :install_and_run, [:jido_assembly, ~w(--sourcemap=inline --watch)]},
+    tailwind: {Tailwind, :install_and_run, [:jido_assembly, ~w(--watch)]}
   ]
 
 # ## SSL Support
@@ -43,7 +43,7 @@ config :jido_campfire, Jido.CampfireWeb.Endpoint,
 # different ports.
 
 # Reload browser tabs when matching files change.
-config :jido_campfire, Jido.CampfireWeb.Endpoint,
+config :jido_assembly, Jido.AssemblyWeb.Endpoint,
   live_reload: [
     web_console_logger: true,
     patterns: [
@@ -51,13 +51,13 @@ config :jido_campfire, Jido.CampfireWeb.Endpoint,
       ~r"priv/static/(?!uploads/).*\.(js|css|png|jpeg|jpg|gif|svg)$"E,
       # Router, Controllers, LiveViews and LiveComponents
       ~r"app/.*\.(ex|holo)$"E,
-      ~r"lib/jido_campfire_web/router\.ex$"E,
-      ~r"lib/jido_campfire_web/(controllers|live|components)/.*\.(ex|heex)$"E
+      ~r"lib/jido_assembly_web/router\.ex$"E,
+      ~r"lib/jido_assembly_web/(controllers|live|components)/.*\.(ex|heex)$"E
     ]
   ]
 
 # Enable dev routes for dashboard and mailbox
-config :jido_campfire, dev_routes: true
+config :jido_assembly, dev_routes: true
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"

@@ -2,7 +2,7 @@ import Config
 
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
-config :jido_campfire, Jido.CampfireWeb.Endpoint,
+config :jido_assembly, Jido.AssemblyWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
   secret_key_base: "hWPE0iacAQ0sYLKgAeNKvlxOVmSVp7DEagbpDj43CgBlrKlqEUSp8ZboHfgiMJhm",
   server: false
@@ -21,5 +21,5 @@ config :phoenix_live_view,
 config :phoenix,
   sort_verified_routes_query_params: true
 
-config :jido_campfire,
+config :jido_assembly,
   sqlite_path: ":memory:"

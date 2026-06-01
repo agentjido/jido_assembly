@@ -5,7 +5,7 @@
 @source "../css";
 @source "../js";
 @source "../../app";
-@source "../../lib/jido_campfire_web";
+@source "../../lib/jido_assembly_web";
 
 /* A Tailwind plugin that makes "hero-#{ICON}" classes available.
    The heroicons installation itself is managed by your mix.exs */
@@ -107,24 +107,24 @@
 
 :root {
   color-scheme: dark;
-  --campfire-bg: oklch(20% 0.018 258);
-  --campfire-rail: oklch(25% 0.022 258);
-  --campfire-sidebar: oklch(28% 0.024 258);
-  --campfire-panel: oklch(96% 0.006 92);
-  --campfire-panel-muted: oklch(92% 0.009 92);
-  --campfire-ink: oklch(21% 0.017 258);
-  --campfire-muted: oklch(52% 0.02 258);
-  --campfire-line: oklch(84% 0.011 92);
-  --campfire-accent: oklch(65% 0.18 52);
-  --campfire-accent-strong: oklch(58% 0.18 45);
-  --campfire-green: oklch(67% 0.13 157);
+  --assembly-bg: oklch(20% 0.018 258);
+  --assembly-rail: oklch(25% 0.022 258);
+  --assembly-sidebar: oklch(28% 0.024 258);
+  --assembly-panel: oklch(96% 0.006 92);
+  --assembly-panel-muted: oklch(92% 0.009 92);
+  --assembly-ink: oklch(21% 0.017 258);
+  --assembly-muted: oklch(52% 0.02 258);
+  --assembly-line: oklch(84% 0.011 92);
+  --assembly-accent: oklch(65% 0.18 52);
+  --assembly-accent-strong: oklch(58% 0.18 45);
+  --assembly-green: oklch(67% 0.13 157);
 }
 
 html,
 body {
   min-height: 100%;
-  background: var(--campfire-bg);
-  color: var(--campfire-ink);
+  background: var(--assembly-bg);
+  color: var(--assembly-ink);
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 }

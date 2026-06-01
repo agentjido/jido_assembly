@@ -1,4 +1,4 @@
-defmodule Jido.Campfire.HologramPageCase do
+defmodule Jido.Assembly.HologramPageCase do
   @moduledoc """
   Helpers for testing Hologram pages at the action/command boundary.
 
@@ -14,7 +14,7 @@ defmodule Jido.Campfire.HologramPageCase do
       alias Hologram.Component
       alias Hologram.Server
 
-      import Jido.Campfire.HologramPageCase
+      import Jido.Assembly.HologramPageCase
     end
   end
 

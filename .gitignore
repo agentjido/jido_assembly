@@ -23,7 +23,7 @@ erl_crash.dump
 /tmp/
 
 # Ignore package tarball (built via "mix hex.build").
-jido_campfire-*.tar
+jido_assembly-*.tar
 
 # Local SQLite demo state.
 /data/

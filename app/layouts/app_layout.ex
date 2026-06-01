@@ -1,4 +1,4 @@
-defmodule Jido.Campfire.Layouts.App do
+defmodule Jido.Assembly.Layouts.App do
   use Hologram.Component
 
   alias Hologram.UI.Runtime
@@ -10,7 +10,7 @@ defmodule Jido.Campfire.Layouts.App do
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Jido Campfire</title>
+        <title>Jido Assembly</title>
         <link rel="stylesheet" href="/assets/css/app.css" />
         <script defer src="/assets/js/app.js"></script>
         <Runtime />
