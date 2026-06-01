@@ -58,18 +58,71 @@ Assembly stores local demo state in `data/jido_assembly.sqlite3`. Delete that
 file if you want to reset the demo workspace.
 
 The default app works without connector credentials. To enable live connector
-routing, set any supported connector pair before starting the server:
+routing, set any supported connector pair before starting the server. Runtime
+configuration is loaded from `.env` via Dotenvy, so local demos do not need
+shell exports:
 
 ```sh
 cp .env.example .env
-# edit .env and set optional Telegram or Discord values
-# DISCORD_PUBLIC_KEY is only needed for Discord webhook flows
 mix holo
 ```
 
-Local messages in `#ops-workflow` are persisted first, then broadcast to every
-configured live bridge. Inbound Telegram and Discord messages bind back to the
-same canonical ops room through `jido_messaging`.
+### Telegram
+
+1. Create a bot with BotFather and put the token in `.env`:
+
+   ```sh
+   TELEGRAM_BOT_TOKEN=123456:bot-token
+   ```
+
+2. Send a message to the bot, or add the bot to the group/channel you want to
+   bridge.
+
+3. Fetch the chat id:
+
+   ```sh
+   curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getUpdates"
+   ```
+
+   Copy the `message.chat.id` value into either Telegram target env var:
+
+   ```sh
+   TELEGRAM_TEST_CHAT_ID=-1001234567890
+   # or
+   TELEGRAM_BRIDGE_CHAT_ID=-1001234567890
+   ```
+
+4. Restart `mix holo`. The sidebar should show `Telegram` as `live`, local
+   `#ops-workflow` messages will fan out to Telegram, and inbound Telegram
+   messages will persist back into the same canonical room.
+
+### Discord
+
+1. Create a Discord application and bot in the Discord Developer Portal. Enable
+   the bot's Message Content intent so the gateway can read message bodies.
+
+2. Invite the bot to your test server with access to the target channel. It
+   needs to view the channel, read message history, and send messages.
+
+3. Copy the bot token and channel id into `.env`:
+
+   ```sh
+   DISCORD_BOT_TOKEN=discord-bot-token
+   DISCORD_TEST_CHANNEL_ID=123456789012345678
+   # or
+   DISCORD_BRIDGE_CHANNEL_ID=123456789012345678
+   ```
+
+   `DISCORD_PUBLIC_KEY` is optional for this demo path; it is only needed for
+   Discord webhook/interactions flows.
+
+4. Restart `mix holo`. The sidebar should show `Discord` as `live`, local
+   `#ops-workflow` messages will fan out to Discord, and inbound Discord
+   channel messages will persist back into the same canonical room.
+
+Connector setup is per-provider. If only Telegram is configured, Telegram runs
+live and Discord stays in seeded demo mode. If neither is configured, the app is
+still fully usable with provider-shaped demo traffic.
 
 To try live AI agent actions, add an Anthropic key before starting the server:
 
@@ -91,6 +144,12 @@ SQLite and signal APIs from
 [agentjido/jido_messaging#24](https://github.com/agentjido/jido_messaging/pull/24)
 are merged but not yet released to Hex. After a new Hex release ships, switch
 `mix.exs` back to the released package.
+
+Hologram is temporarily pinned to
+[`36a8b75206ca8862115c4908d8bdc81b7eedc2fc`](https://github.com/bartblast/hologram/commit/36a8b75206ca8862115c4908d8bdc81b7eedc2fc),
+which fixes reflection of Erlang-compiled BEAM modules that use Elixir-style
+module names, such as `Luerl`. After that fix ships in a Hologram patch
+release, switch `mix.exs` back to the released package.
 
 ## Code Shape
 
@@ -131,18 +190,11 @@ checks that matter to a chat product: two browser sessions, realtime sends,
 room creation propagation, mobile layout, focus/keyboard behavior, and visual
 overflow.
 
-`Hologram.Test.setup/0` exists for browser/feature tests, but in this app it
-needs the Assembly Hologram patch/prune path because `jido_messaging` pulls in
-server-only transitive BEAM modules that Hologram `0.9.1` tries to reflect over.
-That makes the current feature-test story workable, but not as mature as
-Phoenix LiveView's built-in test ergonomics.
-
-## Hologram Note
-
-`jido_messaging` currently pulls in a transitive Erlang dependency with BEAM
-debug info that Hologram `0.9.1` cannot reflect over. `mix setup` applies a
-narrow local patch to `deps/hologram/lib/hologram/reflection.ex` so unsupported
-BEAM debug info is skipped instead of crashing the Hologram compiler.
+`Hologram.Test.setup/0` exists for browser/feature tests, but the current
+feature-test story is still not as mature as Phoenix LiveView's built-in test
+ergonomics. Assembly keeps a small Hologram prune compile task so server-only
+modules stay out of the client compiler path, while the upstream Hologram pin
+handles Erlang-compiled transitive modules correctly.
 
 ## Intentional Non-Goals
 

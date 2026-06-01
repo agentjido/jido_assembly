@@ -45,7 +45,7 @@ defmodule Jido.Assembly.MixProject do
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_view, "~> 1.1.0"},
-      {:hologram, "~> 0.9.1"},
+      {:hologram, github: "bartblast/hologram", ref: "36a8b75206ca8862115c4908d8bdc81b7eedc2fc"},
       # Temporary until the merged jido_messaging SQLite/signal APIs ship to Hex.
       {:jido_messaging, github: "agentjido/jido_messaging", branch: "main"},
       {:jido_chat_discord, github: "agentjido/jido_chat_discord", branch: "main"},
@@ -80,12 +80,9 @@ defmodule Jido.Assembly.MixProject do
     [
       setup: [
         "deps.get",
-        "patch.hologram",
-        "deps.compile hologram --force",
         "assets.setup",
         "assets.build"
       ],
-      "patch.hologram": ["cmd elixir scripts/patch_hologram_reflection.exs"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind jido_assembly", "esbuild jido_assembly"],
       "assets.deploy": [
