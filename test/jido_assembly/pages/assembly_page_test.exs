@@ -7,6 +7,9 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
   alias Jido.Assembly.{Chat, Presence}
   alias Jido.Assembly.Pages.Assembly
 
+  @ops_room "room:ops-workflow"
+  @agent_names ["Triage Agent", "Bridge Agent", "Runbook Agent"]
+
   setup do
     Presence.reset()
 
@@ -21,16 +24,16 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
     {component, server} = init_page(Assembly)
 
     assert component.state.workspace == %{id: "jido", name: "Jido Assembly"}
-    assert component.state.active_room_id == "room:general"
+    assert component.state.active_room_id == @ops_room
     assert component.state.rail_target == "channels"
     assert Enum.any?(component.state.developer_stack, &(&1.name == "Jido Chat"))
     assert Enum.any?(component.state.developer_contract, &(&1.detail == "Jido.Chat.PostPayload"))
     assert component.state.last_event.title == "Workspace loaded"
-    assert Enum.any?(component.state.channels, &(&1.id == "room:general"))
-    assert Enum.any?(component.state.channels, &(&1.id == "room:agent-lab"))
+    assert Enum.any?(component.state.channels, &(&1.id == @ops_room))
+    assert Enum.any?(component.state.channels, &(&1.id == "room:connector-lab"))
     assert Enum.any?(component.state.direct_messages, &(&1.id == "dm:maggie"))
-    assert Enum.any?(component.state.direct_messages, &(&1.id == "dm:alice"))
-    assert Enum.map(component.state.agent_demo.agents, & &1.name) == ["Alice", "Bob", "Charlie"]
+    assert Enum.any?(component.state.direct_messages, &(&1.id == "dm:triage"))
+    assert Enum.map(component.state.agent_demo.agents, & &1.name) == @agent_names
     assert component.state.agent_prompt_draft == ""
     assert component.next_action == %Action{name: :presence_heartbeat, delay: 250}
     assert {{:workspace, Chat.workspace_id()}, "page"} in server.subscriptions
@@ -43,7 +46,7 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
 
     assert %Command{
              name: :touch_presence,
-             params: %{user_id: "user:you", room_id: "room:general"}
+             params: %{user_id: "user:you", room_id: @ops_room}
            } = component.next_command
 
     assert %Action{name: :presence_heartbeat, delay: delay} = component.next_action
@@ -56,7 +59,7 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
     server =
       Assembly.command(
         :touch_presence,
-        %{user_id: "user:maggie", room_id: "room:general"},
+        %{user_id: "user:maggie", room_id: @ops_room},
         server
       )
 
@@ -89,7 +92,7 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
 
     assert %Command{
              name: :load_snapshot,
-             params: %{user_id: "user:you", active_room_id: "room:general"}
+             params: %{user_id: "user:you", active_room_id: @ops_room}
            } = component.next_command
 
     assert component.state.last_event.title == "Presence synced"
@@ -101,7 +104,7 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
     refute Enum.find(component.state.direct_messages, &(&1.id == "dm:maggie")).online
 
     assert {:ok, _presence, _signals} =
-             Chat.touch_presence("user:maggie", "room:general", session_id: "snapshot-presence")
+             Chat.touch_presence("user:maggie", @ops_room, session_id: "snapshot-presence")
 
     component = Assembly.action(:snapshot_loaded, %{snapshot: Chat.snapshot()}, component)
 
@@ -138,7 +141,7 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
 
     assert %Command{
              name: :persist_message,
-             params: %{room_id: "room:general", body: "ship it", sender_id: "user:you"}
+             params: %{room_id: @ops_room, body: "ship it", sender_id: "user:you"}
            } = component.next_command
   end
 
@@ -152,7 +155,7 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
 
     assert %Command{
              name: :persist_message,
-             params: %{room_id: "room:general", body: "enter submit", sender_id: "user:you"}
+             params: %{room_id: @ops_room, body: "enter submit", sender_id: "user:you"}
            } = component.next_command
   end
 
@@ -177,7 +180,7 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
     assert %Command{
              name: :run_agent_round,
              params: %{
-               room_id: "room:general",
+               room_id: @ops_room,
                safety_enabled: true,
                inter_agent_enabled: true
              }
@@ -206,7 +209,7 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
     assert %Command{
              name: :prompt_agent_round,
              params: %{
-               room_id: "room:general",
+               room_id: @ops_room,
                body: "How should we ship this?",
                sender_id: "user:you",
                safety_enabled: true,
@@ -220,14 +223,14 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
     server = %Server{cid: "page", instance_id: "command-test", session_id: "session-test"}
 
     server =
-      Assembly.command(:persist_message, %{room_id: "room:general", body: body}, server)
+      Assembly.command(:persist_message, %{room_id: @ops_room, body: body}, server)
 
     assert [
              %Broadcast{
                channel: {:workspace, "jido"},
                action_name: :message_saved,
                params: %{
-                 room_id: "room:general",
+                 room_id: @ops_room,
                  message: message,
                  signal: %{type: "jido.messaging.room.message_added"}
                }
@@ -301,7 +304,7 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
     assert %Command{
              name: :persist_reply,
              params: %{
-               room_id: "room:general",
+               room_id: @ops_room,
                root_message_id: root_id,
                body: "thread note",
                sender_id: "user:you"
@@ -322,7 +325,7 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
     component = Assembly.action(:rail_channels, %{}, component)
     assert component.state.rail_target == "channels"
     assert component.state.active_room_kind == "channel"
-    assert component.state.active_room_id == "room:general"
+    assert component.state.active_room_id == @ops_room
   end
 
   test "rail search and user buttons expose their active targets" do
@@ -330,11 +333,11 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
 
     component = Assembly.action(:rail_search, %{}, component)
     assert component.state.rail_target == "search"
-    assert component.state.active_room_id == "room:general"
+    assert component.state.active_room_id == @ops_room
 
     component = Assembly.action(:rail_users, %{}, component)
     assert component.state.rail_target == "users"
-    assert component.state.active_room_id == "room:general"
+    assert component.state.active_room_id == @ops_room
   end
 
   test "persist_channel command creates a group chat and broadcasts it" do
@@ -405,10 +408,10 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
     {component, _server} = init_page(Assembly)
 
     messages = [
-      message_view("room:general",
-        sender_id: "agent:alice",
-        author: "Alice",
-        avatar: "AL",
+      message_view(@ops_room,
+        sender_id: "agent:triage",
+        author: "Triage Agent",
+        avatar: "TA",
         tone: "bg-cyan-200 text-cyan-950"
       )
     ]
@@ -419,7 +422,7 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
       Assembly.action(
         :agent_round_finished,
         %{
-          room_id: "room:general",
+          room_id: @ops_room,
           messages: messages,
           agent_demo: component.state.agent_demo,
           signal: %{type: "jido.messaging.room.message_added"}
@@ -439,6 +442,7 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
       sender_id: "user:maggie",
       author: "Maggie",
       avatar: "MH",
+      avatar_url: "https://api.dicebear.com/10.x/lorelei/svg?seed=user%3Amaggie%3AMaggie",
       tone: "bg-rose-200 text-rose-950"
     }
 
@@ -450,11 +454,31 @@ defmodule Jido.Assembly.Pages.AssemblyTest do
       sender_id: profile.sender_id,
       author: profile.author,
       avatar: profile.avatar,
+      avatar_url: profile.avatar_url,
       tone: profile.tone,
       own: false,
       time: "07:20",
       body: "A test message.",
       status: "sent",
+      source: "local",
+      source_label: "Local",
+      source_detail: "assembly",
+      channel: "assembly",
+      bridge_id: "",
+      provider_payload: %{},
+      workflow: nil,
+      delivery: %{
+        status: "sent",
+        route_decision: "local",
+        attempted: 0,
+        delivered: 0,
+        failed: 0,
+        bridge_id: "",
+        channel: "assembly",
+        external_room_id: "",
+        error: ""
+      },
+      metadata: %{},
       thread_id: nil,
       reply_to_id: nil,
       is_reply: false,

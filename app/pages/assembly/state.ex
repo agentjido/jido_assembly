@@ -56,6 +56,7 @@ defmodule Jido.Assembly.Pages.Assembly.State do
     |> put_state(:active_room_kind, snapshot.active_room_kind)
     |> put_state(:active_room_prefix, snapshot.active_room_prefix)
     |> put_state(:active_topic, snapshot.active_topic)
+    |> put_state(:connector_snapshot, snapshot.connector_snapshot)
     |> put_state(:member_count_label, snapshot.member_count_label)
     |> put_state(:messages, snapshot.messages)
     |> put_state(:message_count, Enum.count(snapshot.messages))
@@ -63,6 +64,7 @@ defmodule Jido.Assembly.Pages.Assembly.State do
     |> put_state(:developer_capabilities, snapshot.inspector.capabilities)
     |> put_state(:developer_contract_by_room, snapshot.inspector.contracts_by_room)
     |> put_state(:developer_contract, snapshot.inspector.chat_contract)
+    |> put_state(:developer_message_inspector, snapshot.inspector.message_inspector)
     |> put_state(:developer_room_metrics, snapshot.inspector.room_metrics)
     |> put_state(:last_event, snapshot.inspector.last_event)
   end
@@ -84,6 +86,7 @@ defmodule Jido.Assembly.Pages.Assembly.State do
     |> put_state(:member_count_label, room.member_count_label)
     |> put_state(:messages, messages)
     |> put_state(:message_count, Enum.count(messages))
+    |> put_state(:developer_message_inspector, message_inspector(List.last(messages)))
     |> put_state(:draft, "")
     |> put_state(:error, nil)
     |> put_state(:thread_open, false)
@@ -143,6 +146,45 @@ defmodule Jido.Assembly.Pages.Assembly.State do
     }
   end
 
+  def message_inspector(nil) do
+    inspector = %{
+      title: "No message selected",
+      provider_payload: %{},
+      normalized_message: %{},
+      persisted_record: %{},
+      delivery: %{}
+    }
+
+    put_inspector_text(inspector)
+  end
+
+  def message_inspector(message) do
+    body = Map.get(message, :body, "")
+
+    inspector = %{
+      title: "#{Map.get(message, :source_label, "Local")}: #{String.slice(body, 0, 46)}",
+      provider_payload: Map.get(message, :provider_payload, %{}) || %{},
+      normalized_message: %{
+        id: message.id,
+        room_id: message.room_id,
+        sender_id: message.sender_id,
+        source: Map.get(message, :source, "local"),
+        channel: Map.get(message, :channel, "assembly"),
+        text: body
+      },
+      persisted_record: %{
+        id: message.id,
+        room_id: message.room_id,
+        thread_id: message.thread_id,
+        reply_to_id: message.reply_to_id,
+        status: message.status
+      },
+      delivery: Map.get(message, :delivery, %{}) || %{}
+    }
+
+    put_inspector_text(inspector)
+  end
+
   def room_label(component, room_id) do
     case Enum.find(component.state.rooms, &(&1.id == room_id)) do
       nil -> room_id
@@ -159,6 +201,7 @@ defmodule Jido.Assembly.Pages.Assembly.State do
     |> put_state(:messages_by_room, messages_by_room)
     |> put_state(:messages, active_messages(component, room_id, messages_for_room))
     |> put_state(:message_count, active_message_count(component, room_id, messages_for_room))
+    |> maybe_put_message_inspector(room_id, message)
   end
 
   def put_thread_reply(component, room_id, message) do
@@ -198,6 +241,31 @@ defmodule Jido.Assembly.Pages.Assembly.State do
     else
       put_timeline_message(component, message.room_id, message)
     end
+  end
+
+  defp maybe_put_message_inspector(component, room_id, message) do
+    if component.state.active_room_id == room_id do
+      put_state(component, :developer_message_inspector, message_inspector(message))
+    else
+      component
+    end
+  end
+
+  defp put_inspector_text(inspector) do
+    inspector
+    |> Map.put(
+      :provider_payload_text,
+      inspect(inspector.provider_payload, pretty: true, limit: 20)
+    )
+    |> Map.put(
+      :normalized_message_text,
+      inspect(inspector.normalized_message, pretty: true, limit: 20)
+    )
+    |> Map.put(
+      :persisted_record_text,
+      inspect(inspector.persisted_record, pretty: true, limit: 20)
+    )
+    |> Map.put(:delivery_text, inspect(inspector.delivery, pretty: true, limit: 20))
   end
 
   def get_thread_messages(_component, nil), do: []

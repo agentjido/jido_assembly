@@ -34,12 +34,12 @@ defmodule Jido.Assembly.Inspector do
     %{
       name: "Jido Chat",
       badge: "contract",
-      role: "Typed chat handles and payload vocabulary for adapter-facing work."
+      role: "Typed adapter contracts for Telegram, Discord, and future providers."
     },
     %{
       name: "Jido",
-      badge: "later",
-      role: "Native agent showcase is intentionally left for the next slice."
+      badge: "agents",
+      role: "Native ops agents participate as room members when an LLM key is present."
     }
   ]
 
@@ -54,7 +54,18 @@ defmodule Jido.Assembly.Inspector do
       status: "implemented",
       detail: "Write commands expose committed Jido Signal CloudEvent metadata."
     },
-    %{feature: "Jido agents", status: "deferred", detail: "Kept out of this UI slice."}
+    %{feature: "Telegram bridge", status: "optional", detail: "Live when env vars are present."},
+    %{feature: "Discord bridge", status: "optional", detail: "Live when env vars are present."},
+    %{
+      feature: "Workflow cards",
+      status: "implemented",
+      detail: "Structured metadata on normal messages."
+    },
+    %{
+      feature: "Jido agents",
+      status: "implemented",
+      detail: "Ops agents require ANTHROPIC_API_KEY for live actions."
+    }
   ]
 
   def snapshot(active_room, messages, threads_by_root, rooms) do
@@ -63,6 +74,7 @@ defmodule Jido.Assembly.Inspector do
       capabilities: @capabilities,
       contracts_by_room: Map.new(rooms, &{&1.id, chat_contract(&1)}),
       chat_contract: chat_contract(active_room),
+      message_inspector: message_inspector(List.last(messages)),
       room_metrics: room_metrics(active_room, length(messages), map_size(threads_by_root || %{})),
       last_event: %{
         title: "Workspace loaded",
@@ -70,6 +82,62 @@ defmodule Jido.Assembly.Inspector do
         detail: room_label(active_room)
       }
     }
+  end
+
+  defp message_inspector(nil) do
+    inspector = %{
+      title: "No message selected",
+      provider_payload: %{},
+      normalized_message: %{},
+      persisted_record: %{},
+      delivery: %{}
+    }
+
+    put_inspector_text(inspector)
+  end
+
+  defp message_inspector(message) do
+    body = Map.get(message, :body, "")
+
+    inspector = %{
+      title: "#{Map.get(message, :source_label, "Local")}: #{String.slice(body, 0, 46)}",
+      provider_payload: Map.get(message, :provider_payload, %{}) || %{},
+      normalized_message: %{
+        id: message.id,
+        room_id: message.room_id,
+        sender_id: message.sender_id,
+        source: Map.get(message, :source, "local"),
+        channel: Map.get(message, :channel, "assembly"),
+        text: body
+      },
+      persisted_record: %{
+        id: message.id,
+        room_id: message.room_id,
+        thread_id: message.thread_id,
+        reply_to_id: message.reply_to_id,
+        status: message.status
+      },
+      delivery: Map.get(message, :delivery, %{}) || %{}
+    }
+
+    put_inspector_text(inspector)
+  end
+
+  defp put_inspector_text(inspector) do
+    inspector
+    |> Map.put(
+      :provider_payload_text,
+      inspect(inspector.provider_payload, pretty: true, limit: 20)
+    )
+    |> Map.put(
+      :normalized_message_text,
+      inspect(inspector.normalized_message, pretty: true, limit: 20)
+    )
+    |> Map.put(
+      :persisted_record_text,
+      inspect(inspector.persisted_record, pretty: true, limit: 20)
+    )
+    |> Map.put(:delivery_text, inspect(inspector.delivery, pretty: true, limit: 20))
   end
 
   defp chat_contract(room) do

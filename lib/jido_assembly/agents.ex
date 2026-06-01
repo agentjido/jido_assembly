@@ -19,9 +19,9 @@ defmodule Jido.Assembly.Agents do
   @default_timeout_ms 30_000
 
   @agent_modules %{
-    "agent:alice" => Jido.Assembly.Agents.Alice,
-    "agent:bob" => Jido.Assembly.Agents.Bob,
-    "agent:charlie" => Jido.Assembly.Agents.Charlie
+    "agent:triage" => Jido.Assembly.Agents.Triage,
+    "agent:bridge" => Jido.Assembly.Agents.Bridge,
+    "agent:runbook" => Jido.Assembly.Agents.Runbook
   }
 
   def all do

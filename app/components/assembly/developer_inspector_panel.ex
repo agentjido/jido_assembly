@@ -3,8 +3,10 @@ defmodule Jido.Assembly.Components.Assembly.DeveloperInspectorPanel do
 
   prop :active_room_name, :string
   prop :active_room_prefix, :string
+  prop :connector_snapshot, :map
   prop :developer_capabilities, :list
   prop :developer_contract, :list
+  prop :developer_message_inspector, :map
   prop :developer_room_metrics, :list
   prop :developer_stack, :list
   prop :last_event, :map
@@ -39,6 +41,60 @@ defmodule Jido.Assembly.Components.Assembly.DeveloperInspectorPanel do
                 <span class="rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">{@last_event.layer}</span>
               </div>
               <p class="mt-2 leading-6 text-stone-700">{@last_event.detail}</p>
+            </div>
+          </section>
+
+          <section>
+            <h3 class="mb-2 text-xs font-semibold text-[var(--assembly-muted)]">Message inspector</h3>
+            <div class="rounded-md border border-[var(--assembly-line)] bg-[var(--assembly-panel)] p-3 text-sm">
+              <p class="font-bold text-stone-800">{@developer_message_inspector.title}</p>
+              <div class="mt-3 space-y-3 text-xs">
+                <div>
+                  <p class="font-semibold uppercase text-[var(--assembly-muted)]">Provider payload</p>
+                  <pre class="mt-1 max-h-28 overflow-auto rounded bg-[var(--assembly-panel-muted)] p-2 leading-relaxed text-stone-700">{@developer_message_inspector.provider_payload_text}</pre>
+                </div>
+                <div>
+                  <p class="font-semibold uppercase text-[var(--assembly-muted)]">Normalized message</p>
+                  <pre class="mt-1 max-h-28 overflow-auto rounded bg-[var(--assembly-panel-muted)] p-2 leading-relaxed text-stone-700">{@developer_message_inspector.normalized_message_text}</pre>
+                </div>
+                <div>
+                  <p class="font-semibold uppercase text-[var(--assembly-muted)]">Persisted record</p>
+                  <pre class="mt-1 max-h-28 overflow-auto rounded bg-[var(--assembly-panel-muted)] p-2 leading-relaxed text-stone-700">{@developer_message_inspector.persisted_record_text}</pre>
+                </div>
+                <div>
+                  <p class="font-semibold uppercase text-[var(--assembly-muted)]">Delivery</p>
+                  <pre class="mt-1 max-h-28 overflow-auto rounded bg-[var(--assembly-panel-muted)] p-2 leading-relaxed text-stone-700">{@developer_message_inspector.delivery_text}</pre>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h3 class="mb-2 text-xs font-semibold text-[var(--assembly-muted)]">Connector control plane</h3>
+            <div class="space-y-2">
+              {%for connector <- @connector_snapshot.connectors}
+                <div class="rounded-md border border-[var(--assembly-line)] bg-[var(--assembly-panel)] px-3 py-2 text-sm">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="font-semibold text-stone-800">{connector.name}</span>
+                    <span class="rounded bg-[var(--assembly-panel-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--assembly-muted)]">{connector.status}</span>
+                  </div>
+                  <p class="mt-1 text-xs leading-5 text-[var(--assembly-muted)]">{connector.adapter_module}</p>
+                  <div class="mt-2 grid gap-1 text-xs text-stone-700">
+                    <div class="flex justify-between gap-2">
+                      <span>Bridge</span>
+                      <span class="font-semibold">{connector.bridge_id}</span>
+                    </div>
+                    <div class="flex justify-between gap-2">
+                      <span>Target</span>
+                      <span class="truncate font-semibold">{connector.target_label}</span>
+                    </div>
+                    <div class="flex justify-between gap-2">
+                      <span>Listeners</span>
+                      <span class="font-semibold">{connector.listener_count_label}</span>
+                    </div>
+                  </div>
+                </div>
+              {/for}
             </div>
           </section>
 

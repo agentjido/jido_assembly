@@ -3,6 +3,7 @@ defmodule Jido.Assembly.Components.Assembly.Sidebar do
 
   prop :active_room_id, :string
   prop :channels, :list
+  prop :connector_snapshot, :map
   prop :current_user, :map
   prop :demo_users, :list
   prop :direct_messages, :list
@@ -25,7 +26,23 @@ defmodule Jido.Assembly.Components.Assembly.Sidebar do
             <p class="text-xs font-semibold text-stone-400">Workspace</p>
             <h1 class="mt-1 truncate text-lg font-bold text-stone-50" id="assembly-workspace-heading">{@workspace.name}</h1>
           </div>
-          <span class="rounded-md bg-[var(--assembly-green)]/18 px-2 py-1 text-xs font-semibold text-emerald-200">live</span>
+          <span class="rounded-md bg-[var(--assembly-green)]/18 px-2 py-1 text-xs font-semibold text-emerald-200">
+            {@connector_snapshot.headline}
+          </span>
+        </div>
+
+        <div class="mt-3 grid gap-1.5">
+          {%for connector <- @connector_snapshot.connectors}
+            <div class="flex items-center justify-between gap-2 rounded-md border border-white/10 bg-white/6 px-2 py-1.5">
+              <span class="flex min-w-0 items-center gap-2">
+                <span class="grid size-6 place-items-center rounded bg-white/10 text-[10px] font-black text-stone-100">{connector.short_name}</span>
+                <span class="truncate text-xs font-semibold text-stone-200">{connector.name}</span>
+              </span>
+              <span class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-bold {if connector.mode == "live" do "bg-emerald-300/20 text-emerald-100" else "bg-stone-700 text-stone-300" end}">
+                {connector.status}
+              </span>
+            </div>
+          {/for}
         </div>
 
         <div class="mt-4" id="assembly-demo-users" tabindex="-1">
@@ -138,7 +155,10 @@ defmodule Jido.Assembly.Components.Assembly.Sidebar do
                 $click={:select_room, id: person.id}
               >
                 <span class="flex min-w-0 items-center gap-2">
-                  <span class="size-2 rounded-full {if person.online do "bg-[var(--assembly-green)]" else "bg-stone-500" end}"></span>
+                  <span class="relative shrink-0">
+                    <img class="size-6 rounded-md bg-white/10 object-cover" alt={person.name} src={person.avatar_url} />
+                    <span class="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border border-[var(--assembly-sidebar)] {if person.online do "bg-[var(--assembly-green)]" else "bg-stone-500" end}"></span>
+                  </span>
                   <span class="truncate">{person.name}</span>
                 </span>
                 {%if person.unread > 0}

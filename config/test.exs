@@ -23,3 +23,6 @@ config :phoenix,
 
 config :jido_assembly,
   sqlite_path: ":memory:"
+
+config :req_llm,
+  load_dotenv: false

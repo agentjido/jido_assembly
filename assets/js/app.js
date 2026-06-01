@@ -83,6 +83,114 @@ import "phoenix_html"
 
 
 const composerFieldSelector = "[data-assembly-composer] input[type='text'], [data-assembly-composer] textarea"
+const chatScrollSelector = "[data-assembly-chat-scroll]"
+const chatMessageSelector = "[data-assembly-message-id]"
+const chatEndSelector = "[data-assembly-chat-end]"
+const chatBottomThreshold = 160
+
+const runAfterPaint = (callback) => {
+  requestAnimationFrame(() => requestAnimationFrame(callback))
+}
+
+const chatBottomDistance = (scroller) => (
+  scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+)
+
+const chatMessageSignature = (scroller) => {
+  const messages = scroller.querySelectorAll(chatMessageSelector)
+  const lastMessage = messages[messages.length - 1]
+  const lastMessageId = lastMessage?.getAttribute("data-assembly-message-id") || ""
+
+  return `${messages.length}:${lastMessageId}`
+}
+
+const scrollChatToBottom = (scroller, { behavior = "smooth", force = false } = {}) => {
+  if (!scroller) return
+
+  const shouldScroll =
+    force ||
+    scroller.dataset.assemblyStickToBottom !== "false" ||
+    chatBottomDistance(scroller) <= chatBottomThreshold
+
+  if (!shouldScroll) return
+
+  runAfterPaint(() => {
+    const end = scroller.querySelector(chatEndSelector)
+
+    if (end) {
+      end.scrollIntoView({ block: "end", behavior })
+    } else {
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior })
+    }
+  })
+}
+
+const bindChatScroller = (scroller) => {
+  if (scroller.dataset.assemblyChatScrollBound === "true") return
+
+  scroller.dataset.assemblyChatScrollBound = "true"
+  scroller.dataset.assemblyStickToBottom = "true"
+  scroller.dataset.assemblyMessageSignature = chatMessageSignature(scroller)
+
+  scroller.addEventListener("scroll", () => {
+    scroller.dataset.assemblyStickToBottom =
+      chatBottomDistance(scroller) <= chatBottomThreshold ? "true" : "false"
+  }, { passive: true })
+
+  const observer = new MutationObserver(() => {
+    const nextSignature = chatMessageSignature(scroller)
+
+    if (nextSignature === scroller.dataset.assemblyMessageSignature) return
+
+    scroller.dataset.assemblyMessageSignature = nextSignature
+    scrollChatToBottom(scroller, { force: true })
+  })
+
+  observer.observe(scroller, { childList: true, subtree: true })
+  scrollChatToBottom(scroller, { behavior: "auto", force: true })
+}
+
+const bindChatScrollers = () => {
+  document.querySelectorAll(chatScrollSelector).forEach(bindChatScroller)
+}
+
+let chatScrollObserverStarted = false
+
+const startChatScrollObserver = () => {
+  if (chatScrollObserverStarted) return
+
+  const root = document.body || document.documentElement
+
+  if (!root?.nodeType) return
+
+  chatScrollObserverStarted = true
+
+  new MutationObserver(bindChatScrollers).observe(root, {
+    childList: true,
+    subtree: true
+  })
+}
+
+const startChatScroll = () => {
+  bindChatScrollers()
+  startChatScrollObserver()
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", startChatScroll, { once: true })
+} else {
+  startChatScroll()
+}
+
+const pageWindow = document.defaultView || globalThis
+
+pageWindow.AssemblyChat = {
+  scrollToBottom: () => {
+    document.querySelectorAll(chatScrollSelector).forEach((scroller) => {
+      scrollChatToBottom(scroller, { force: true })
+    })
+  }
+}
 
 document.addEventListener("keydown", (event) => {
   const field = event.target.closest?.(composerFieldSelector)

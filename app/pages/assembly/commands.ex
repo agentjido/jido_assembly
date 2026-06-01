@@ -20,7 +20,7 @@ defmodule Jido.Assembly.Pages.Assembly.Commands do
 
   def command(:touch_presence, params, server) do
     user_id = Map.get(params, :user_id, Chat.current_user_id())
-    room_id = Map.get(params, :room_id, "room:general")
+    room_id = Map.get(params, :room_id, Chat.default_room_id())
 
     case Chat.touch_presence(user_id, room_id, session_id: server.session_id) do
       {:ok, presence, signals} ->
@@ -42,12 +42,14 @@ defmodule Jido.Assembly.Pages.Assembly.Commands do
     case Chat.send_message_command(
            params.room_id,
            params.body,
-           Map.get(params, :sender_id, Chat.current_user_id())
+           Map.get(params, :sender_id, Chat.current_user_id()),
+           route_outbound: true
          ) do
       {:ok, message, signals} ->
         put_workspace_action(server, :message_saved, %{
           room_id: message.room_id,
           message: message,
+          connector_snapshot: Chat.connector_snapshot(message.room_id),
           signal: SignalPresenter.summary(signals, "jido.messaging.room.message_added")
         })
 
@@ -65,6 +67,7 @@ defmodule Jido.Assembly.Pages.Assembly.Commands do
         put_workspace_action(server, :message_saved, %{
           room_id: message.room_id,
           message: message,
+          connector_snapshot: Chat.connector_snapshot(message.room_id),
           signal: SignalPresenter.summary(signals, "jido.messaging.room.message_added")
         })
 
@@ -113,13 +116,15 @@ defmodule Jido.Assembly.Pages.Assembly.Commands do
            params.room_id,
            params.body,
            Map.get(params, :sender_id, Chat.current_user_id()),
-           metadata: %{agent_prompt: true}
+           metadata: %{agent_prompt: true},
+           route_outbound: true
          ) do
       {:ok, prompt_message, prompt_signals} ->
         server =
           put_workspace_action(server, :message_saved, %{
             room_id: prompt_message.room_id,
             message: prompt_message,
+            connector_snapshot: Chat.connector_snapshot(prompt_message.room_id),
             signal: SignalPresenter.summary(prompt_signals, "jido.messaging.room.message_added")
           })
 

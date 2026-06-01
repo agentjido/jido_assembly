@@ -11,8 +11,8 @@ defmodule Jido.Assembly.Layouts.App do
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Jido Assembly</title>
-        <link rel="stylesheet" href="/assets/css/app.css" />
-        <script defer src="/assets/js/app.js"></script>
+        <link rel="stylesheet" href="/assets/css/app.css?v=slack-ui" />
+        <script defer src="/assets/js/app.js?v=chat-scroll"></script>
         <Runtime />
       </head>
       <body>

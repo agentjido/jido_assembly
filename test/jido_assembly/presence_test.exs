@@ -3,6 +3,8 @@ defmodule Jido.Assembly.PresenceTest do
 
   alias Jido.Assembly.{Chat, Messaging, Presence}
 
+  @ops_room "room:ops-workflow"
+
   setup do
     Presence.reset()
 
@@ -17,7 +19,7 @@ defmodule Jido.Assembly.PresenceTest do
     {:ok, subscription_id} = Messaging.subscribe_signals("jido.messaging.**")
 
     assert {:ok, presence, signals} =
-             Chat.touch_presence("user:maggie", "room:general", session_id: "presence-test")
+             Chat.touch_presence("user:maggie", @ops_room, session_id: "presence-test")
 
     assert "user:maggie" in presence.online_user_ids
     assert Presence.online?("user:maggie")
@@ -38,7 +40,7 @@ defmodule Jido.Assembly.PresenceTest do
     assert changed.data["to"] == :online
 
     assert {:ok, refreshed, []} =
-             Chat.touch_presence("user:maggie", "room:general", session_id: "presence-test")
+             Chat.touch_presence("user:maggie", @ops_room, session_id: "presence-test")
 
     assert "user:maggie" in refreshed.online_user_ids
 

@@ -9,6 +9,18 @@ defmodule Jido.Assembly.Chat.Projections do
 
   alias Jido.Assembly.{Messaging, Seeds}
 
+  @avatar_base_url "https://api.dicebear.com/10.x/lorelei/svg"
+
+  def avatar_url(person_id, name \\ nil) do
+    seed =
+      [person_id, name || person_id]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.join(":")
+      |> URI.encode_www_form()
+
+    "#{@avatar_base_url}?seed=#{seed}"
+  end
+
   def room_views(presence \\ %{online_user_ids: []}) do
     case Messaging.list_rooms(limit: 500) do
       {:ok, rooms} ->
@@ -46,6 +58,11 @@ defmodule Jido.Assembly.Chat.Projections do
       presence: presence,
       availability: availability,
       avatar: if(participant, do: participant.initials, else: "#"),
+      avatar_url:
+        if(participant,
+          do: participant.avatar_url,
+          else: avatar_url(room.id, room.name || room.id)
+        ),
       tone:
         if(participant, do: participant.tone, else: "bg-[var(--assembly-accent)] text-stone-950"),
       member_count: Enum.count(member_ids),
@@ -109,20 +126,34 @@ defmodule Jido.Assembly.Chat.Projections do
 
   def message_view(message, user_id, reply_count \\ 0, presence \\ %{online_user_ids: []}) do
     sender = person(message.sender_id, presence)
-    mentioned_user_ids = metadata_value(message.metadata, :mentions, [])
+    metadata = message.metadata || %{}
+    mentioned_user_ids = metadata_value(metadata, :mentions, [])
     reactions = reaction_views(message.reactions || %{}, user_id)
+    source = metadata_value(metadata, :source, "local")
+    channel = metadata_value(metadata, :channel, nil)
+    author = author_name(sender, metadata)
 
     %{
       id: message.id,
       room_id: message.room_id,
       sender_id: message.sender_id,
-      author: sender.name,
+      author: author,
       avatar: sender.initials,
+      avatar_url: message_avatar_url(sender, author),
       tone: sender.tone,
       own: message.sender_id == user_id,
       time: format_time(message.inserted_at),
       body: message_text(message),
       status: message.status |> Atom.to_string() |> String.replace("_", " "),
+      source: to_string(source || "local"),
+      source_label: source_label(source, channel),
+      source_detail: source_detail(metadata),
+      channel: normalize_optional(channel),
+      bridge_id: normalize_optional(metadata_value(metadata, :bridge_id, nil)),
+      delivery: delivery_view(message, metadata),
+      workflow: workflow_view(metadata),
+      provider_payload: metadata_value(metadata, :provider_payload, %{}),
+      metadata: metadata,
       thread_id: message.thread_id,
       reply_to_id: message.reply_to_id,
       is_reply: is_binary(message.thread_id),
@@ -144,16 +175,18 @@ defmodule Jido.Assembly.Chat.Projections do
         identity = participant.identity || %{}
         availability = participant.presence |> Atom.to_string()
         online = online?(presence, participant.id)
+        name = metadata_value(identity, :name, participant.id)
 
         %{
           id: participant.id,
-          name: metadata_value(identity, :name, participant.id),
+          name: name,
           initials:
             metadata_value(
               identity,
               :initials,
-              initials_for(metadata_value(identity, :name, participant.id))
+              initials_for(name)
             ),
+          avatar_url: metadata_value(identity, :avatar_url, avatar_url(participant.id, name)),
           title: metadata_value(identity, :title, ""),
           tone: metadata_value(identity, :tone, "bg-stone-200 text-stone-950"),
           availability: availability,
@@ -192,6 +225,111 @@ defmodule Jido.Assembly.Chat.Projections do
   def metadata_value(metadata, key, default) when is_map(metadata) do
     Map.get(metadata, key, Map.get(metadata, Atom.to_string(key), default))
   end
+
+  defp source_label("adapter", channel), do: connector_label(channel)
+  defp source_label(:adapter, channel), do: connector_label(channel)
+  defp source_label("local", channel) when channel in [:telegram, "telegram"], do: "Telegram"
+  defp source_label(:local, channel) when channel in [:telegram, "telegram"], do: "Telegram"
+  defp source_label("local", channel) when channel in [:discord, "discord"], do: "Discord"
+  defp source_label(:local, channel) when channel in [:discord, "discord"], do: "Discord"
+  defp source_label("workflow", _channel), do: "Workflow"
+  defp source_label(:workflow, _channel), do: "Workflow"
+  defp source_label("jido_ai", _channel), do: "Agent"
+  defp source_label(:jido_ai, _channel), do: "Agent"
+  defp source_label("seed", _channel), do: "Assembly"
+  defp source_label(:seed, _channel), do: "Assembly"
+  defp source_label("jido_assembly", _channel), do: "Assembly"
+  defp source_label(:jido_assembly, _channel), do: "Assembly"
+  defp source_label(_source, _channel), do: "Local"
+
+  defp source_detail(metadata) do
+    cond do
+      metadata_value(metadata, :external_message_id, nil) ->
+        ""
+
+      metadata_value(metadata, :workflow_run_id, nil) ->
+        metadata_value(metadata, :workflow_run_id, nil)
+
+      metadata_value(metadata, :route_decision, nil) ->
+        metadata_value(metadata, :route_decision, nil)
+
+      true ->
+        ""
+    end
+  end
+
+  defp connector_label(:telegram), do: "Telegram"
+  defp connector_label("telegram"), do: "Telegram"
+  defp connector_label(:discord), do: "Discord"
+  defp connector_label("discord"), do: "Discord"
+  defp connector_label(nil), do: "Adapter"
+  defp connector_label(channel), do: channel |> to_string() |> String.capitalize()
+
+  defp author_name(sender, metadata) do
+    external_name =
+      metadata_value(
+        metadata,
+        :display_name,
+        metadata_value(metadata, :username, nil)
+      )
+
+    cond do
+      generated_chat_id?(sender.id) && present?(external_name) ->
+        external_name
+
+      true ->
+        sender.name
+    end
+  end
+
+  defp message_avatar_url(sender, author) do
+    if generated_chat_id?(sender.id) && author != sender.name do
+      avatar_url(sender.id, author)
+    else
+      sender.avatar_url
+    end
+  end
+
+  defp generated_chat_id?(person_id), do: person_id |> to_string() |> String.starts_with?("jch_")
+
+  defp present?(value), do: value |> to_string() |> String.trim() != ""
+
+  defp delivery_view(message, metadata) do
+    %{
+      status: message.status |> Atom.to_string() |> String.replace("_", " "),
+      route_decision: metadata_value(metadata, :route_decision, "local"),
+      attempted: metadata_value(metadata, :attempted, 0),
+      delivered: metadata_value(metadata, :delivered, 0),
+      failed: metadata_value(metadata, :failed, 0),
+      bridge_id: normalize_optional(metadata_value(metadata, :bridge_id, nil)),
+      channel: normalize_optional(metadata_value(metadata, :channel, nil)),
+      external_room_id:
+        normalize_optional(metadata_value(metadata, :delivery_external_room_id, nil)),
+      error: normalize_optional(metadata_value(metadata, :delivery_error, nil))
+    }
+  end
+
+  defp workflow_view(metadata) do
+    case metadata_value(metadata, :workflow_event_type, nil) do
+      nil ->
+        nil
+
+      event_type ->
+        %{
+          event_type: event_type,
+          run_id: metadata_value(metadata, :workflow_run_id, ""),
+          severity: metadata_value(metadata, :severity, ""),
+          state: metadata_value(metadata, :state, ""),
+          actions: metadata_value(metadata, :actions, []),
+          external_refs: metadata_value(metadata, :external_refs, [])
+        }
+    end
+  end
+
+  defp normalize_optional(nil), do: ""
+  defp normalize_optional(value) when is_binary(value), do: value
+  defp normalize_optional(value) when is_atom(value), do: Atom.to_string(value)
+  defp normalize_optional(value), do: to_string(value)
 
   defp list_all_message_views(room_id, user_id, presence) do
     {timeline, threads} = room_message_data(room_id, user_id, presence)
@@ -279,6 +417,7 @@ defmodule Jido.Assembly.Chat.Projections do
       id: person_id,
       name: person_id,
       initials: initials_for(person_id),
+      avatar_url: avatar_url(person_id, person_id),
       title: "",
       tone: "bg-stone-200 text-stone-950",
       availability: "offline",

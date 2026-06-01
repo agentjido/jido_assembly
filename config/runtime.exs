@@ -1,4 +1,15 @@
 import Config
+import Dotenvy
+
+if config_env() != :test do
+  app_root = System.get_env("RELEASE_ROOT") || Path.expand("..", __DIR__)
+
+  source!([
+    System.get_env(),
+    Path.join(app_root, ".env"),
+    System.get_env()
+  ])
+end
 
 # config/runtime.exs is executed for all environments, including
 # during releases. It is executed after compilation and before the

@@ -2,25 +2,26 @@ defmodule Jido.Assembly.Seeds do
   @moduledoc """
   Demo workspace seed data and startup seeding for Assembly.
 
-  The demo intentionally boots with one workspace, a few people, channels, DMs,
-  and starter messages. Keeping those fixtures here makes `Jido.Assembly.Chat`
-  a chat context instead of a mixed context/fixture module.
+  The upgraded showcase boots directly into an ops workflow room. Every visible
+  timeline item is a real `jido_messaging` record: local chat, provider-shaped
+  adapter messages, workflow events, thread replies, reactions, and agent
+  messages all share the same persistence path.
   """
 
   use GenServer
 
   alias Jido.Assembly.Chat.Mentions
-  alias Jido.Assembly.Messaging
+  alias Jido.Assembly.{Bridges, Messaging}
 
   @workspace_id "jido"
   @workspace_name "Jido Assembly"
   @current_user_id "user:you"
   @system_user_id "system:assembly"
-  @default_room_id "room:general"
+  @default_room_id "room:ops-workflow"
 
   @reaction_options [
     %{key: "+1", glyph: "👍", label: "Agree"},
-    %{key: "ship", glyph: "🚀", label: "Ship"},
+    %{key: "ship", glyph: "🚀", label: "Approve"},
     %{key: "seen", glyph: "👀", label: "Seen"}
   ]
 
@@ -66,37 +67,70 @@ defmodule Jido.Assembly.Seeds do
       tone: "bg-violet-200 text-violet-950"
     },
     %{
-      id: "agent:alice",
-      name: "Alice",
-      handle: "alice",
-      initials: "AL",
+      id: "agent:triage",
+      name: "Triage Agent",
+      handle: "triage",
+      initials: "TA",
       presence: :online,
-      title: "Architecture AI",
+      title: "Impact and severity",
       type: :agent,
       capabilities: [:text, :ai],
       tone: "bg-cyan-200 text-cyan-950"
     },
     %{
-      id: "agent:bob",
-      name: "Bob",
-      handle: "bob",
-      initials: "BO",
+      id: "agent:bridge",
+      name: "Bridge Agent",
+      handle: "bridge",
+      initials: "BA",
       presence: :online,
-      title: "Implementation AI",
+      title: "Connector and delivery state",
       type: :agent,
       capabilities: [:text, :ai],
       tone: "bg-lime-200 text-lime-950"
     },
     %{
-      id: "agent:charlie",
-      name: "Charlie",
-      handle: "charlie",
-      initials: "CH",
+      id: "agent:runbook",
+      name: "Runbook Agent",
+      handle: "runbook",
+      initials: "RA",
       presence: :online,
-      title: "Review AI",
+      title: "Next actions and approvals",
       type: :agent,
       capabilities: [:text, :ai],
       tone: "bg-amber-200 text-amber-950"
+    },
+    %{
+      id: "provider:telegram",
+      name: "Telegram Ops",
+      handle: "telegram",
+      initials: "TG",
+      presence: :online,
+      title: "Telegram connector",
+      type: :system,
+      capabilities: [:text],
+      tone: "bg-sky-200 text-sky-950"
+    },
+    %{
+      id: "provider:discord",
+      name: "Discord Engineering",
+      handle: "discord",
+      initials: "DC",
+      presence: :online,
+      title: "Discord connector",
+      type: :system,
+      capabilities: [:text],
+      tone: "bg-indigo-200 text-indigo-950"
+    },
+    %{
+      id: "workflow:deploy",
+      name: "Deploy Workflow",
+      handle: "workflow",
+      initials: "WF",
+      presence: :online,
+      title: "Jido workflow event",
+      type: :system,
+      capabilities: [:text],
+      tone: "bg-emerald-200 text-emerald-950"
     },
     %{
       id: @system_user_id,
@@ -112,35 +146,24 @@ defmodule Jido.Assembly.Seeds do
 
   @seed_channels [
     %{
-      id: "room:general",
-      name: "general",
-      topic: "Daily coordination for the Jido messaging demo.",
-      position: 10
-    },
-    %{
-      id: "room:adapter-lab",
-      name: "adapter-lab",
-      topic: "Proof loops for bridges and provider events.",
-      position: 20
+      id: "room:ops-workflow",
+      name: "ops-workflow",
+      topic:
+        "One canonical room where humans, agents, workflow events, Telegram, and Discord meet.",
+      position: 10,
+      agent_room: true
     },
     %{
       id: "room:runtime",
       name: "runtime",
       topic: "Messaging persistence, delivery, and Hologram state.",
+      position: 20
+    },
+    %{
+      id: "room:connector-lab",
+      name: "connector-lab",
+      topic: "Focused notes for optional Telegram and Discord connector setup.",
       position: 30
-    },
-    %{
-      id: "room:agent-lab",
-      name: "agent-lab",
-      topic: "Bounded Jido AI agent rounds with Alice, Bob, and Charlie.",
-      position: 35,
-      agent_room: true
-    },
-    %{
-      id: "room:design",
-      name: "design",
-      topic: "Assembly product surface and interaction model.",
-      position: 40
     }
   ]
 
@@ -148,61 +171,166 @@ defmodule Jido.Assembly.Seeds do
     %{id: "dm:maggie", participant_id: "user:maggie", position: 110},
     %{id: "dm:nolan", participant_id: "user:nolan", position: 120},
     %{id: "dm:priya", participant_id: "user:priya", position: 130},
-    %{id: "dm:alice", participant_id: "agent:alice", position: 210},
-    %{id: "dm:bob", participant_id: "agent:bob", position: 220},
-    %{id: "dm:charlie", participant_id: "agent:charlie", position: 230}
+    %{id: "dm:triage", participant_id: "agent:triage", position: 210},
+    %{id: "dm:bridge", participant_id: "agent:bridge", position: 220},
+    %{id: "dm:runbook", participant_id: "agent:runbook", position: 230}
+  ]
+
+  @legacy_seed_room_ids [
+    "room:general",
+    "room:design",
+    "room:agent-lab",
+    "room:adapter-lab",
+    "dm:alice",
+    "dm:bob",
+    "dm:charlie"
   ]
 
   @seed_messages %{
-    "room:general" => [
-      {"user:maggie",
-       "Assembly should prove the Hologram path without touching the existing UI package."},
-      {"user:nolan", "SQLite is wired as a simple persistence layer behind jido_messaging."},
-      {"user:priya",
-       "The useful demo slice is channel switching, DMs, reactions, mentions, and threads."}
-    ],
-    "room:adapter-lab" => [
-      {"user:maggie",
-       "Slack outbound smoke is clean. Need a webhook replay before we call the adapter green."},
-      {"user:priya", "I dropped the recent provider event shape in the lab thread."}
+    "room:ops-workflow" => [
+      %{
+        id: "msg:ops-telegram-symptom",
+        sender_id: "provider:telegram",
+        role: :user,
+        body:
+          "[Telegram #customer-ops] EU checkout latency is over 4s for the third minute. Two customers reported payment retries.",
+        metadata: %{
+          source: "adapter",
+          channel: :telegram,
+          bridge_id: "assembly:telegram",
+          external_message_id: "tg-demo-1001",
+          external_room_id: "telegram-demo-ops",
+          provider_payload: %{
+            "chat_id" => "telegram-demo-ops",
+            "message_id" => "tg-demo-1001",
+            "username" => "customer_ops"
+          }
+        },
+        reactions: %{"seen" => ["user:you", "user:maggie"]}
+      },
+      %{
+        id: "msg:ops-discord-context",
+        sender_id: "provider:discord",
+        role: :user,
+        body:
+          "[Discord #eng-oncall] Deploy 2026.06.01.4 changed the pricing cache TTL. Error rate is still flat, but p95 latency moved.",
+        metadata: %{
+          source: "adapter",
+          channel: :discord,
+          bridge_id: "assembly:discord",
+          external_message_id: "dc-demo-2201",
+          external_room_id: "discord-demo-eng",
+          provider_payload: %{
+            "channel_id" => "discord-demo-eng",
+            "message_id" => "dc-demo-2201",
+            "author" => "eng-oncall"
+          }
+        },
+        reactions: %{"seen" => ["user:nolan"]}
+      },
+      %{
+        id: "msg:ops-triage-summary",
+        sender_id: "agent:triage",
+        role: :assistant,
+        body:
+          "Impact is customer-visible checkout latency in EU, severity looks elevated but not outage-level. Open question: whether pricing cache TTL increased remote calls during checkout.",
+        metadata: %{
+          source: "jido_ai",
+          agent_id: "agent:triage",
+          agent_name: "Triage Agent",
+          agent_round_id: "seeded-ops-round",
+          agent_prompt_message_id: "msg:ops-telegram-symptom",
+          seeded: true
+        }
+      },
+      %{
+        id: "msg:ops-workflow-approval",
+        sender_id: "workflow:deploy",
+        role: :system,
+        body:
+          "Approval requested: roll back pricing cache TTL from 15m to 2m for EU checkout. Requires one engineer acknowledgement.",
+        metadata: %{
+          source: "workflow",
+          workflow_event_type: "approval_requested",
+          workflow_run_id: "wf-eu-checkout-rollback",
+          severity: "high",
+          state: "waiting_for_approval",
+          actions: ["approve", "hold", "open_runbook"],
+          external_refs: ["deploy:2026.06.01.4", "runbook:checkout-cache"]
+        },
+        reactions: %{"ship" => ["user:maggie"], "+1" => ["user:you"]}
+      },
+      %{
+        id: "msg:ops-thread-root",
+        sender_id: "user:nolan",
+        role: :user,
+        body:
+          "I am opening a diagnosis thread on the TTL change. First check: compare cache miss rate before and after deploy.",
+        metadata: %{source: "seed", thread_topic: "Pricing cache diagnosis"},
+        reactions: %{"seen" => ["agent:runbook"]}
+      },
+      %{
+        id: "msg:ops-thread-runbook",
+        sender_id: "agent:runbook",
+        role: :assistant,
+        body:
+          "Runbook step: if cache miss rate increased more than 20%, roll back TTL and watch checkout p95 for two windows.",
+        thread_id: "msg:ops-thread-root",
+        reply_to_id: "msg:ops-thread-root",
+        metadata: %{
+          source: "jido_ai",
+          agent_id: "agent:runbook",
+          agent_name: "Runbook Agent",
+          seeded: true
+        }
+      },
+      %{
+        id: "msg:ops-bridge-note",
+        sender_id: "agent:bridge",
+        role: :assistant,
+        body:
+          "Connector state is canonical: Telegram and Discord messages land in this room through room bindings, and local messages broadcast to every configured live bridge.",
+        metadata: %{
+          source: "jido_ai",
+          agent_id: "agent:bridge",
+          agent_name: "Bridge Agent",
+          seeded: true
+        }
+      }
     ],
     "room:runtime" => [
       {"user:nolan",
        "Treat realtime as a notification layer, then read canonical records from jido_messaging."},
-      {"user:maggie", "Persisted message IDs are the stable UI keys now."}
+      {"user:maggie",
+       "Bridge configs, room bindings, routing policy, and messages all live in jido_messaging."}
     ],
-    "room:agent-lab" => [
+    "room:connector-lab" => [
       {"system:assembly",
-       "Alice, Bob, and Charlie are Jido AI participants. Add ANTHROPIC_API_KEY, keep the safety cap on, and ask them a question."},
+       "Set TELEGRAM_BOT_TOKEN plus TELEGRAM_TEST_CHAT_ID or DISCORD_BOT_TOKEN plus DISCORD_TEST_CHANNEL_ID, then restart Assembly."},
       {"user:you",
-       "Let's use this room to see how AI agents can participate in a normal Assembly channel."}
-    ],
-    "room:design" => [
-      {"user:priya",
-       "Keep the right panel contextual. Threads and room details can share that space."},
-      {"user:you", "The sidebar should feel familiar, but Assembly can own the warmer accent."},
-      {"user:maggie", "First screen is the chat workspace. No marketing shell."}
+       "Without credentials, this room still shows provider-shaped demo traffic in #ops-workflow."}
     ],
     "dm:maggie" => [
       {"user:maggie",
-       "Can you keep the adapter lab and runtime work split? I want both paths visible."},
-      {"user:you", "Yes. Channels for team rooms, DMs for person-to-person notes."}
+       "The ops room should prove the bridge path without turning into admin CRUD."},
+      {"user:you", "Agreed. Setup is automatic; the UI shows status and evidence."}
     ],
     "dm:nolan" => [
-      {"user:nolan", "SQLite durability is enough for the developer demo."}
+      {"user:nolan", "SQLite durability is enough for the developer showcase."}
     ],
     "dm:priya" => [
-      {"user:priya", "Mobile needs a room switcher since the sidebar collapses."}
+      {"user:priya",
+       "Drop directly into the chat experience. Setup can stay as a small status surface."}
     ],
-    "dm:alice" => [
-      {"agent:alice",
-       "Send me architecture questions from a room when you want a careful boundary pass."}
+    "dm:triage" => [
+      {"agent:triage",
+       "Mention me in the ops room when you need impact, severity, and unresolved questions."}
     ],
-    "dm:bob" => [
-      {"agent:bob", "I can turn a rough idea into a small implementation path."}
+    "dm:bridge" => [
+      {"agent:bridge", "I can explain connector state, delivery attempts, and room bindings."}
     ],
-    "dm:charlie" => [
-      {"agent:charlie", "I am useful when you want risk, test, and failure-mode review."}
+    "dm:runbook" => [
+      {"agent:runbook", "I turn an ops signal into ordered checks and approval steps."}
     ]
   }
 
@@ -244,8 +372,10 @@ defmodule Jido.Assembly.Seeds do
   end
 
   def ensure_seeded! do
+    cleanup_legacy_seed_rooms()
     seed_people()
     seed_rooms()
+    {:ok, _connectors} = Bridges.ensure_ops_room!(@default_room_id)
     seed_messages()
     :ok
   end
@@ -258,6 +388,15 @@ defmodule Jido.Assembly.Seeds do
   def init(_opts) do
     ensure_seeded!()
     {:ok, %{}}
+  end
+
+  defp cleanup_legacy_seed_rooms do
+    Enum.each(@legacy_seed_room_ids, fn room_id ->
+      case Messaging.get_room(room_id) do
+        {:ok, _room} -> Messaging.delete_room(room_id)
+        {:error, :not_found} -> :ok
+      end
+    end)
   end
 
   defp seed_people do
@@ -332,19 +471,13 @@ defmodule Jido.Assembly.Seeds do
     end
   end
 
-  defp channel_member_ids(%{agent_room: true}),
-    do: demo_user_ids() ++ Enum.map(agent_people(), & &1.id)
+  defp channel_member_ids(%{agent_room: true}) do
+    demo_user_ids() ++
+      Enum.map(agent_people(), & &1.id) ++
+      ["provider:telegram", "provider:discord", "workflow:deploy"]
+  end
 
   defp channel_member_ids(_channel), do: demo_user_ids()
-
-  defp message_role(@system_user_id), do: :system
-
-  defp message_role(sender_id) do
-    case person_seed(sender_id) do
-      %{type: :agent} -> :assistant
-      _person -> :user
-    end
-  end
 
   defp seed_messages do
     Enum.each(@seed_messages, fn {room_id, messages} ->
@@ -354,31 +487,67 @@ defmodule Jido.Assembly.Seeds do
 
           messages
           |> Enum.with_index()
-          |> Enum.each(fn {{sender_id, text}, index} ->
-            inserted_at = DateTime.add(base, index * 180, :second)
-
-            {:ok, _message} =
-              Messaging.save_message(%{
-                room_id: room_id,
-                sender_id: sender_id,
-                role: message_role(sender_id),
-                content: [%{type: "text", text: text}],
-                status: :sent,
-                inserted_at: inserted_at,
-                updated_at: inserted_at,
-                metadata:
-                  %{
-                    workspace_id: @workspace_id,
-                    source: "seed"
-                  }
-                  |> Map.merge(Mentions.metadata(text))
-              })
+          |> Enum.each(fn {message, index} ->
+            seed_message(room_id, message, DateTime.add(base, index * 180, :second))
           end)
 
         _other ->
           :ok
       end
     end)
+  end
+
+  defp seed_message(room_id, {sender_id, text}, inserted_at) do
+    seed_message(
+      room_id,
+      %{
+        sender_id: sender_id,
+        body: text,
+        role: message_role(sender_id),
+        metadata: %{source: "seed"}
+      },
+      inserted_at
+    )
+  end
+
+  defp seed_message(room_id, attrs, inserted_at) when is_map(attrs) do
+    text = Map.fetch!(attrs, :body)
+
+    message_attrs =
+      %{
+        id: Map.get(attrs, :id),
+        room_id: room_id,
+        sender_id: Map.fetch!(attrs, :sender_id),
+        role: Map.get(attrs, :role, message_role(Map.fetch!(attrs, :sender_id))),
+        content: [%{type: "text", text: text}],
+        reply_to_id: Map.get(attrs, :reply_to_id),
+        thread_id: Map.get(attrs, :thread_id),
+        external_id: metadata_value(Map.get(attrs, :metadata, %{}), :external_message_id),
+        status: Map.get(attrs, :status, :sent),
+        reactions: Map.get(attrs, :reactions, %{}),
+        inserted_at: inserted_at,
+        updated_at: inserted_at,
+        metadata:
+          %{
+            workspace_id: @workspace_id
+          }
+          |> Map.merge(Map.get(attrs, :metadata, %{}))
+          |> Map.merge(Mentions.metadata(text))
+      }
+      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+      |> Map.new()
+
+    {:ok, _message} = Messaging.save_message(message_attrs)
+  end
+
+  defp message_role(@system_user_id), do: :system
+
+  defp message_role(sender_id) do
+    case person_seed(sender_id) do
+      %{type: :agent} -> :assistant
+      %{type: :system} -> :system
+      _person -> :user
+    end
   end
 
   defp person_view_from_seed(person) do
@@ -417,4 +586,10 @@ defmodule Jido.Assembly.Seeds do
       initials -> initials
     end
   end
+
+  defp metadata_value(metadata, key) when is_map(metadata) do
+    Map.get(metadata, key) || Map.get(metadata, Atom.to_string(key))
+  end
+
+  defp metadata_value(_metadata, _key), do: nil
 end

@@ -3,6 +3,10 @@ defmodule Jido.Assembly.AgentsTest do
 
   alias Jido.Assembly.{Agents, Chat, Messaging}
 
+  @ops_room "room:ops-workflow"
+  @agent_names ["Triage Agent", "Bridge Agent", "Runbook Agent"]
+  @agent_ids ["agent:triage", "agent:bridge", "agent:runbook"]
+
   setup do
     app_key = Application.get_env(:req_llm, :anthropic_api_key)
     env_key = System.get_env("ANTHROPIC_API_KEY")
@@ -21,7 +25,7 @@ defmodule Jido.Assembly.AgentsTest do
   test "snapshot exposes the three seeded Jido AI participants" do
     snapshot = Agents.snapshot()
 
-    assert Enum.map(snapshot.agents, & &1.name) == ["Alice", "Bob", "Charlie"]
+    assert Enum.map(snapshot.agents, & &1.name) == @agent_names
     assert snapshot.model == "anthropic:claude-haiku-4-5"
     assert snapshot.safety.max_agents_per_round == 3
     assert snapshot.safety.max_rounds_per_prompt == 2
@@ -29,12 +33,12 @@ defmodule Jido.Assembly.AgentsTest do
   end
 
   test "run_round refuses to run without an Anthropic API key" do
-    assert {:error, :missing_api_key} = Agents.run_round("room:agent-lab")
+    assert {:error, :missing_api_key} = Agents.run_round(@ops_room)
   end
 
   test "run_round requires the safety cap even with a test responder" do
     assert {:error, :safety_required} =
-             Agents.run_round("room:agent-lab",
+             Agents.run_round(@ops_room,
                safety_enabled: false,
                responder: fn agent, _room, _transcript -> {:ok, "#{agent.name} ready."} end
              )
@@ -56,7 +60,7 @@ defmodule Jido.Assembly.AgentsTest do
                inter_agent_enabled: true
              )
 
-    assert Enum.map(result.messages, & &1.author) == ["Alice", "Bob", "Charlie"]
+    assert Enum.map(result.messages, & &1.author) == @agent_names
     assert result.prompt_message_id == prompt.id
     assert result.round_index == 1
     assert result.round_limit == 2
@@ -64,7 +68,7 @@ defmodule Jido.Assembly.AgentsTest do
 
     for message <- result.messages do
       assert message.room_id == room.id
-      assert message.sender_id in ["agent:alice", "agent:bob", "agent:charlie"]
+      assert message.sender_id in @agent_ids
 
       assert {:ok, persisted} = Messaging.get_message(message.id)
       assert persisted.role == :assistant
@@ -98,9 +102,9 @@ defmodule Jido.Assembly.AgentsTest do
 
     assert Enum.count(result.messages) == 3
 
-    assert_receive {:agent_transcript, "Alice", count}
-    assert_receive {:agent_transcript, "Bob", ^count}
-    assert_receive {:agent_transcript, "Charlie", ^count}
+    assert_receive {:agent_transcript, "Triage Agent", count}
+    assert_receive {:agent_transcript, "Bridge Agent", ^count}
+    assert_receive {:agent_transcript, "Runbook Agent", ^count}
   end
 
   test "run_round defaults to the latest human prompt" do
@@ -116,8 +120,8 @@ defmodule Jido.Assembly.AgentsTest do
     parent = self()
 
     responder = fn agent, _room, transcript ->
-      if agent.name == "Alice" do
-        send(parent, {:alice_transcript, Enum.map(transcript, & &1.body)})
+      if agent.name == "Triage Agent" do
+        send(parent, {:triage_transcript, Enum.map(transcript, & &1.body)})
       end
 
       {:ok, "#{agent.name} answers the latest prompt."}
@@ -131,7 +135,7 @@ defmodule Jido.Assembly.AgentsTest do
              )
 
     assert result.prompt_message_id == second_prompt.id
-    assert_receive {:alice_transcript, bodies}
+    assert_receive {:triage_transcript, bodies}
     assert Enum.any?(bodies, &String.contains?(&1, "Second prompt"))
     refute Enum.any?(bodies, &String.contains?(&1, "First prompt"))
   end

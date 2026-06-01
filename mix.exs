@@ -48,7 +48,10 @@ defmodule Jido.Assembly.MixProject do
       {:hologram, "~> 0.9.1"},
       # Temporary until the merged jido_messaging SQLite/signal APIs ship to Hex.
       {:jido_messaging, github: "agentjido/jido_messaging", branch: "main"},
+      {:jido_chat_discord, github: "agentjido/jido_chat_discord", branch: "main"},
+      {:jido_chat_telegram, github: "agentjido/jido_chat_telegram", branch: "main"},
       {:jido_ai, "~> 2.2"},
+      {:dotenvy, "~> 1.1"},
       {:lazy_html, ">= 0.1.0", only: :test},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},

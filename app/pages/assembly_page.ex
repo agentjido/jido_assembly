@@ -45,7 +45,7 @@ defmodule Jido.Assembly.Pages.Assembly do
     focus_rail_target(:workspace)
 
     component
-    |> State.select_room("room:general")
+    |> State.select_room(Chat.default_room_id())
     |> queue_presence_touch()
   end
 
@@ -247,6 +247,10 @@ defmodule Jido.Assembly.Pages.Assembly do
 
     component
     |> State.put_rooms(rooms)
+    |> put_state(
+      :connector_snapshot,
+      map_value(params, :connector_snapshot, component.state.connector_snapshot)
+    )
     |> put_state(:send_pending, false)
     |> put_state(:reply_pending, false)
     |> put_state(:error, nil)
@@ -503,6 +507,7 @@ defmodule Jido.Assembly.Pages.Assembly do
           room_form_open={@room_form_open}
           search_query={@search_query}
           search_results={@search_results}
+          connector_snapshot={@connector_snapshot}
           workspace={@workspace}
         />
         <ChatPanel
@@ -516,6 +521,7 @@ defmodule Jido.Assembly.Pages.Assembly do
           agent_prompt_draft={@agent_prompt_draft}
           agent_round_pending={@agent_round_pending}
           agent_safety_enabled={@agent_safety_enabled}
+          connector_snapshot={@connector_snapshot}
           current_user={@current_user}
           draft={@draft}
           error={@error}
@@ -540,8 +546,10 @@ defmodule Jido.Assembly.Pages.Assembly do
           active_room_prefix={@active_room_prefix}
           developer_capabilities={@developer_capabilities}
           developer_contract={@developer_contract}
+          developer_message_inspector={@developer_message_inspector}
           developer_room_metrics={@developer_room_metrics}
           developer_stack={@developer_stack}
+          connector_snapshot={@connector_snapshot}
           last_event={@last_event}
           thread_open={@thread_open}
         />

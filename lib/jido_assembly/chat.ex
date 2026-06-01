@@ -10,14 +10,16 @@ defmodule Jido.Assembly.Chat do
   """
 
   alias Jido.Assembly.Chat.{Mentions, Projections}
-  alias Jido.Assembly.{Inspector, Messaging, Presence, Seeds}
+  alias Jido.Assembly.{Bridges, Inspector, Messaging, Presence, Seeds}
   alias Jido.Messaging.CommandResult
 
   def workspace_id, do: Seeds.workspace_id()
   def current_user_id, do: Seeds.current_user_id()
+  def default_room_id, do: Seeds.default_room_id()
   def reaction_options, do: Seeds.reaction_options()
   def ensure_seeded!, do: Seeds.ensure_seeded!()
   def presence_snapshot, do: Presence.snapshot()
+  def connector_snapshot(room_id \\ Seeds.default_room_id()), do: Bridges.snapshot(room_id)
 
   def demo_users(presence \\ presence_snapshot()) do
     apply_people_presence(Seeds.demo_users(), Map.get(presence, :online_user_ids, []))
@@ -67,6 +69,7 @@ defmodule Jido.Assembly.Chat do
       active_room_kind: active_room.kind,
       active_room_prefix: active_room.prefix,
       active_topic: active_room.topic,
+      connector_snapshot: Bridges.snapshot(active_room.id),
       messages: messages,
       member_count_label: active_room.member_count_label,
       inspector:
@@ -82,6 +85,13 @@ defmodule Jido.Assembly.Chat do
   def list_message_views(room_id, user_id \\ Seeds.current_user_id()) when is_binary(room_id) do
     ensure_seeded!()
     Projections.list_message_views(room_id, user_id, presence_snapshot())
+  end
+
+  def get_message_view(message_id, user_id \\ Seeds.current_user_id())
+      when is_binary(message_id) do
+    with {:ok, message} <- Messaging.get_message(message_id) do
+      {:ok, Projections.message_view_with_reply_count(message, user_id, presence_snapshot())}
+    end
   end
 
   def list_thread_views(room_id, root_message_id, user_id \\ Seeds.current_user_id()) do
@@ -138,14 +148,30 @@ defmodule Jido.Assembly.Chat do
                    target_kind: target_kind(room, thread_id)
                  )
                ) do
-          signals =
-            maybe_append_thread_signal(signals, room, message, thread_id)
+          message =
+            maybe_route_outbound(room, message, body, role, thread_id, metadata, opts)
+
+          signals = maybe_append_thread_signal(signals, room, message, thread_id)
 
           {:ok,
            Projections.message_view_with_reply_count(message, sender_id, presence_snapshot()),
            signals}
         end
     end
+  end
+
+  defp maybe_route_outbound(room, message, body, role, thread_id, metadata, opts) do
+    if route_outbound?(role, thread_id, metadata, opts) do
+      room.id
+      |> Bridges.route_outbound(body)
+      |> then(&Bridges.persist_delivery_result(message, &1))
+    else
+      message
+    end
+  end
+
+  defp route_outbound?(_role, _thread_id, _metadata, opts) do
+    Keyword.get(opts, :route_outbound, false)
   end
 
   defp maybe_append_thread_signal(signals, _room, _message, nil), do: signals

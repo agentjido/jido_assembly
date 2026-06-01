@@ -1,10 +1,12 @@
 # Jido Assembly
 
-`jido_assembly` is a developer-level spike for a small Slack-like Jido
-workspace. It uses Hologram as the UI layer, Phoenix as the web shell,
-`jido_messaging` for durable chat primitives, SQLite for local persistence,
-Jido Signal-style events for UI updates, Phoenix Presence for online state, and
-`jido_ai` for bounded AI participants in chat.
+`jido_assembly` is the Jido Chat showcase app: agent-native team chat plus a
+bridge console, presented with familiar Slack-like chat primitives. It uses
+Hologram as the UI layer, Phoenix as the web shell, `jido_messaging` for durable
+chat primitives and bridge routing, SQLite for local persistence, Jido
+Signal-style events for UI updates, Phoenix Presence for online state,
+`jido_chat` adapters for optional Telegram and Discord connectors, and `jido_ai`
+for bounded AI participants in chat.
 
 The package module prefix is `Jido.Assembly`.
 
@@ -14,20 +16,24 @@ The package module prefix is `Jido.Assembly`.
 
 - A responsive Slack-like shell with workspace rail, channels, DMs, timeline,
   composer, reactions, threads, mentions, search, and mobile room switching.
-- One seeded workspace that is useful for 5-10 local demo users without adding
-  production authentication.
+- A seeded `#ops-workflow` room that drops directly into a realistic incident
+  flow with humans, narrative agents, provider-shaped messages, and a workflow
+  approval card.
 - Durable rooms, participants, messages, reactions, and thread replies through
   `jido_messaging` and SQLite.
 - Hologram realtime broadcasts carrying compact `jido.messaging.*` signal
   metadata after durable writes commit.
-- Three seeded `jido_ai` participants, Alice, Bob, and Charlie, that can run a
-  safety-capped agent round and write normal assistant messages into a channel.
+- Optional live Telegram and Discord bridge setup using `jido_messaging`
+  `BridgeConfig`, `RoomBinding`, and `RoutingPolicy` records. Without
+  credentials, seeded demo traffic keeps the app usable.
+- Three seeded ops agents, Triage Agent, Bridge Agent, and Runbook Agent, that
+  can run a safety-capped agent round when `ANTHROPIC_API_KEY` is present.
 - A thin Phoenix web layer: Phoenix hosts Hologram, health checks, static
   assets, and Presence integration while the chat behavior lives in the app
   context.
 - A developer inspector that shows how Hologram, `jido_messaging`, Jido Signal,
-  SQLite, `jido_chat`, and Assembly responsibilities fit together for the
-  active room.
+  SQLite, `jido_chat`, adapters, bridge delivery metadata, and Assembly
+  responsibilities fit together for the active room.
 
 ## Run
 
@@ -51,7 +57,21 @@ PORT=4002 mix holo
 Assembly stores local demo state in `data/jido_assembly.sqlite3`. Delete that
 file if you want to reset the demo workspace.
 
-To try the AI agent round, add an Anthropic key before starting the server:
+The default app works without connector credentials. To enable live connector
+routing, set any supported connector pair before starting the server:
+
+```sh
+cp .env.example .env
+# edit .env and set optional Telegram or Discord values
+# DISCORD_PUBLIC_KEY is only needed for Discord webhook flows
+mix holo
+```
+
+Local messages in `#ops-workflow` are persisted first, then broadcast to every
+configured live bridge. Inbound Telegram and Discord messages bind back to the
+same canonical ops room through `jido_messaging`.
+
+To try live AI agent actions, add an Anthropic key before starting the server:
 
 ```sh
 cp .env.example .env
@@ -59,9 +79,10 @@ cp .env.example .env
 mix holo
 ```
 
-Open `#agent-lab`, keep `Safety cap` enabled, type a question in the AI agent
-prompt, and click `Ask`. Each human prompt can be continued for two agent
-rounds; ask a new question to restart the discussion.
+Open the default `#ops-workflow` room, keep `Safety cap` enabled, type a
+question in the ops agent prompt, and click `Ask`. Each human prompt can be
+continued for two agent rounds; ask a new question to restart the discussion.
+Without `ANTHROPIC_API_KEY`, only live agent actions are disabled.
 
 ## Dependency Note
 
@@ -75,13 +96,14 @@ are merged but not yet released to Hex. After a new Hex release ships, switch
 
 - `app/` contains Hologram pages, components, reducers, and server command
   handlers.
-- `lib/jido_assembly/` contains the Assembly backend context, read projections,
-  mentions, seeds, messaging integration, Presence adapter configuration,
-  Jido AI agent orchestration, and developer inspector data.
+- `lib/jido_assembly/` contains the Assembly backend context, bridge setup,
+  read projections, mentions, seeds, messaging integration, Presence adapter
+  configuration, Jido AI agent orchestration, and developer inspector data.
 - `lib/jido_assembly_web/` stays thin: endpoint, router, Phoenix Presence,
   Hologram presence notifier, and signal presentation for the UI.
-- `jido_messaging` owns the reusable messaging primitives and SQLite adapter;
-  Assembly owns the Slack-like product choices and demo read models.
+- `jido_messaging` owns reusable messaging primitives, bridge configs, room
+  bindings, routing policies, and the SQLite adapter. Assembly owns the
+  Slack-like product choices and demo read models.
 
 ## Testing Story
 
@@ -92,7 +114,7 @@ evaluation, client `action/3` state transitions, server `command/3` handling,
 and queued Hologram broadcasts.
 
 The local suite also checks the Assembly chat context, mentions, Presence
-adapter, signal presenter, and wiring to the upstream
+adapter, connector setup, signal presenter, and wiring to the upstream
 `Jido.Messaging.Persistence.SQLite` adapter. Adapter-level durability tests
 belong in `jido_messaging`; Assembly should prove that the demo uses those
 primitives cleanly rather than duplicating low-level persistence coverage.
@@ -127,7 +149,8 @@ BEAM debug info is skipped instead of crashing the Hologram compiler.
 - Full Slack API compatibility
 - Production authentication, authorization, billing, or compliance controls
 - File uploads, huddles, workflows, apps, Canvas, Lists, or enterprise admin
-- Jido-native Room Assistant and bridge-console showcase. That comes next.
+- Full connector administration UI beyond the small status surface and
+  developer inspector
 
 See `ROADMAP.md` for a fuller product and platform roadmap against Slack-like
 alternatives.
