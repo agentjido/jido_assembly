@@ -139,17 +139,15 @@ Without `ANTHROPIC_API_KEY`, only live agent actions are disabled.
 
 ## Dependency Note
 
-Assembly temporarily depends on the `jido_messaging` `main` branch because the
-SQLite and signal APIs from
-[agentjido/jido_messaging#24](https://github.com/agentjido/jido_messaging/pull/24)
-are merged but not yet released to Hex. After a new Hex release ships, switch
-`mix.exs` back to the released package.
+Assembly depends on released Hex packages for Hologram, `jido_messaging`, and
+the optional Telegram and Discord chat adapters. Hologram `0.9.2` includes the
+reflection fix for Erlang-compiled BEAM modules that use Elixir-style module
+names, such as `Luerl`. `jido_messaging` `1.1.0` includes the SQLite
+persistence, presence, and signal helper APIs that Assembly exercises.
 
-Hologram is temporarily pinned to
-[`36a8b75206ca8862115c4908d8bdc81b7eedc2fc`](https://github.com/bartblast/hologram/commit/36a8b75206ca8862115c4908d8bdc81b7eedc2fc),
-which fixes reflection of Erlang-compiled BEAM modules that use Elixir-style
-module names, such as `Luerl`. After that fix ships in a Hologram patch
-release, switch `mix.exs` back to the released package.
+The Phoenix-generated `heroicons` asset dependency still uses Tailwind Labs'
+optimized SVG checkout from GitHub because `assets/vendor/heroicons.js` reads
+the `deps/heroicons/optimized` file tree directly.
 
 ## Code Shape
 
