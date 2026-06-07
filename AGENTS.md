@@ -65,6 +65,10 @@ events for UI updates, and Phoenix Presence for online state.
   panel.
 
 
+## Release Hygiene
+
+- Do not modify `CHANGELOG.md`; release notes are generated from Git history during release, so keep changes focused on proper Conventional Commits.
+
 <!-- usage-rules-start -->
 
 <!-- phoenix:elixir-start -->
