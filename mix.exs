@@ -45,7 +45,7 @@ defmodule Jido.Assembly.MixProject do
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_view, "~> 1.1.0"},
-      {:hologram, "~> 0.9.2"},
+      {:hologram, "~> 0.9.3"},
       {:jido_messaging, "~> 1.1"},
       {:jido_chat_discord, "~> 1.0"},
       {:jido_chat_telegram, "~> 1.1"},
