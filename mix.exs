@@ -9,6 +9,8 @@ defmodule Jido.Assembly.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
+      # No patched cowlib Hex release is available yet.
+      hex: [ignore_advisories: ["CVE-2026-43969", "CVE-2026-43966"]],
       deps: deps(),
       compilers: [:phoenix_live_view] ++ Mix.compilers() ++ [:assembly_hologram_prune, :hologram],
       listeners: [Phoenix.CodeReloader]
@@ -50,6 +52,7 @@ defmodule Jido.Assembly.MixProject do
       {:jido_chat_discord, "~> 1.0"},
       {:jido_chat_telegram, "~> 1.1"},
       {:jido_ai, "~> 2.2"},
+      {:req, "~> 0.6.2", override: true},
       {:dotenvy, "~> 1.1"},
       {:lazy_html, ">= 0.1.0", only: :test},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
