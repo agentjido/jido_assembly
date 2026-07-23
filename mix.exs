@@ -43,20 +43,20 @@ defmodule Jido.Assembly.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
-      {:phoenix, "~> 1.8.5"},
-      {:phoenix_html, "~> 4.1"},
-      {:phoenix_live_reload, "~> 1.2", only: :dev},
-      {:phoenix_live_view, "~> 1.1.0"},
-      {:hologram, "~> 0.9.3"},
+      {:phoenix, "~> 1.8.9"},
+      {:phoenix_html, "~> 4.3"},
+      {:phoenix_live_reload, "~> 1.6", only: :dev},
+      {:phoenix_live_view, "~> 1.2"},
+      {:hologram, "~> 0.10.1"},
       {:jido_messaging, "~> 1.1"},
       {:jido_chat_discord, "~> 1.0"},
       {:jido_chat_telegram, "~> 1.1"},
       {:jido_ai, "~> 2.2"},
-      {:req, "~> 0.6.2", override: true},
       {:dotenvy, "~> 1.1"},
-      {:lazy_html, ">= 0.1.0", only: :test},
+      {:lazy_html, "~> 0.1.12", only: :test},
+      {:req, "~> 0.6.3", override: true},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
-      {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},
+      {:tailwind, "~> 0.5", runtime: Mix.env() == :dev},
       {:heroicons,
        github: "tailwindlabs/heroicons",
        tag: "v2.2.0",
@@ -92,7 +92,7 @@ defmodule Jido.Assembly.MixProject do
         "esbuild jido_assembly --minify",
         "phx.digest"
       ],
-      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
+      precommit: ["compile --warnings-as-errors", "deps.unlock --check-unused", "format", "test"]
     ]
   end
 end
